@@ -86,8 +86,73 @@ xf2 <- xf2 %>%
         separate(Director, into = c("Director","DirURL"), sep = "\\|", extra = "merge") %>% 
         separate(Writer, into = c("Writer","WritURL"), sep = "\\|", extra = "merge") %>% 
         #rearrange and drop unnecessary columns
-        select(ProdCode, Title, epURL, Director, Writer, AirDate, Viewers)
+        select(ProdCode, Title, epURL, Director, Writer, AirDate, Viewers) %>% 
+        # get rid of factors
+        mutate(ProdCode = as.character(ProdCode), 
+               AirDate = as.character(AirDate),
+               Viewers = as.numeric(as.character(Viewers))
+               )
 
 # get plot summaries
 xf2$content <- unlist(lapply(xf2$epURL, getPlot))
 
+#######################################
+# Corpus construction and text cleanup
+# http://stackoverflow.com/questions/19850638/tm-reading-in-data-frame-and-keep-texts-id
+
+library(tm)
+
+# create Corpus
+m <- list(id = "ProdCode", content = "content")
+myReader <- readTabular(mapping = m)
+xfcorpus <- Corpus(DataframeSource(xf2), readerControl = list(reader = myReader, language = "en"))
+
+# manually attach the product code for later identificaiton
+for (i in 1:length(xfcorpus)) {
+        attr(xfcorpus[[i]], "ID") <- xf2$ProdCode[i]
+}
+
+## alternative with locally saved files (unnecessary)
+# write.csv(x = xf2$content, file = "plot/")
+# 
+# sapply(row.names(xf2), 
+#        function (x) write.table(xf2[[x,8]], file=paste("plot\\", xf2[[x,1]], ".txt", sep=""),
+#                               quote = FALSE, row.names = FALSE, col.names = FALSE
+#                                 )
+# )
+# 
+# xfcorpus <- VCorpus(DirSource("plot", encoding = ""),
+#                        readerControl = list(language = "en"))
+
+
+# clean up for NLP
+xfcorpus <- tm_map(xfcorpus, stripWhitespace) #white spaces
+xfcorpus <- tm_map(xfcorpus, content_transformer(tolower))  #lower case
+xfcorpus <- tm_map(xfcorpus, removeWords, stopwords("english")) #stop words
+xfcorpus <- tm_map(xfcorpus, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
+xfcorpus <- tm_map(xfcorpus, content_transformer(function(row) iconv(row, "latin1", "ASCII", sub=""))) # non-ascii chars
+xfcorpus <- tm_map(xfcorpus, removeNumbers) # numbers
+xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
+
+# Create Document Term Matrix as data frame
+xfDTM <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
+xfDTM <- data.frame(as.matrix(xfDTM))
+
+# Merge DTM with episode data (unsure if this df will be used later)
+merged <- merge(xf2, xfDTM, by.x = "ProdCode", by.y = "row.names" )
+
+
+#################################################
+# Perform Latent Semantic Analysis (LSA)
+# Reference: http://nm.wu-wien.ac.at/research/publications/b675.pdf
+
+# remove temrs with less than 5 global counts
+xfsums <- xfDTM[colSums(xfDTM) > 5]
+
+library(lsa)
+
+# weigh DTM - local log * global entropy 
+# reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.69.9244&rep=rep1&type=pdf
+weighted <- lw_logtf(xfsums) * gw_entropy(xfsums)
+xfspace <- lsa(weighted, dims = dimcalc_share())
+xfmatrix <- as.textmatrix(xfspace)
