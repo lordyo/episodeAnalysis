@@ -91,7 +91,10 @@ xf2 <- xf2 %>%
         mutate(ProdCode = as.character(ProdCode), 
                AirDate = as.character(AirDate),
                Viewers = as.numeric(as.character(Viewers))
-               )
+               ) %>% 
+        # add title without spaces and punctuation for use in variable names
+        mutate(ValTitle = gsub(" ", "", Title, fixed = TRUE)) %>% 
+        mutate(ValTitle = gsub("[[:punct:]]", "", ValTitle, perl = TRUE))
 
 # get plot summaries
 xf2$content <- unlist(lapply(xf2$epURL, getPlot))
@@ -148,11 +151,30 @@ merged <- merge(xf2, xfDTM, by.x = "ProdCode", by.y = "row.names" )
 
 # remove temrs with less than 5 global counts
 xfsums <- xfDTM[colSums(xfDTM) > 5]
+#xfsums <- xfDTM  #to use all words
+
 
 library(lsa)
 
 # weigh DTM - local log * global entropy 
 # reference: http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.69.9244&rep=rep1&type=pdf
 weighted <- lw_logtf(xfsums) * gw_entropy(xfsums)
+
 xfspace <- lsa(weighted, dims = dimcalc_share())
 xfmatrix <- as.textmatrix(xfspace)
+
+# get singular values
+# xfsvd <- xfspace[1][1]
+# xfsvd <- t(xfspace$tk)
+
+# word distance matrix
+# lsaMatrix <- diag(xfspace$sk) %*% t(xfspace$dk)
+# distMatrix <- 1 - cosine(lsaMatrix)
+
+# episode distance matrix
+lsaMatrix <- diag(xfspace$sk) %*% t(xfspace$tk)
+distMatrix <- 1 - cosine(lsaMatrix)
+
+
+
+
