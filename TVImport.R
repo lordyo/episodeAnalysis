@@ -176,6 +176,105 @@ xfmerged <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
 
 
 #################################################
+# Exploratory analysis
+# Word counts incl. comparison between Monster and Mythology episodes
+
+library(dplyr)
+
+# function to set counts to boolean values
+numToBool <- function(x) {
+        ifelse(is.numeric(x), x > 0, NA)
+}
+
+xfmergedTF <- xfmerged
+
+# change word counts to Boolean values ()
+xfmergedTF[ , -c(1:10)] <- as.data.frame(lapply(
+        xfmergedTF[ , -c(1:10)],FUN = function(x) {sapply(x, FUN=numToBool)}))
+
+nxf <- nrow(xfmergedTF)
+
+# get total Boolean counts (all episodes)
+xfcountAll <- xfmergedTF[ , -c(1:10)] %>% 
+        colSums() %>% 
+        sort(decreasing = TRUE) %>% 
+        `/`(nxf)  #divide by number of episodes
+
+head(xfcountAll, 50)
+
+# get Boolean counts for Monster and Mythology episodes
+xfcountTFMonster <- filter(xfmergedTF, Mythology == FALSE)
+xfcountTFMyth <- filter(xfmergedTF, Mythology == TRUE)
+
+# get number of episodes
+nmyth = nrow(xfcountTFMyth)
+nmon = nrow(xfcountTFMonster)
+
+# function to create a ranked list of Boolean counts
+prepCountList <- function(df, n) {
+        
+        df <- df[ , -c(1:10)] %>% 
+                colSums() %>% 
+                sort(decreasing = TRUE) %>% 
+                `/`(n) %>% 
+                as.data.frame()
+        
+        df <- mutate(df, term = rownames(df))
+        df$rank <- 1:nrow(df)
+        
+        colnames(df) <- c("part", "term", "rank")
+        
+        df
+}
+
+# create ranked lists for Monster and Mythology episodes
+xfcountTFMonster <- prepCountList(xfcountTFMonster, nmon)
+xfcountTFMyth <- prepCountList(xfcountTFMyth, nmyth)
+
+# join the two ranked lists
+xfcountmerged <- full_join(xfcountTFMyth, xfcountTFMonster, by = "term")
+
+# create data for slopegraph (top 30 terms for both episode types)
+# exclude difference below 10%
+xfcountmerged <- xfcountmerged %>% 
+        filter(rank.x <= 30 | rank.y <= 30) %>% 
+        select(myth = part.x, monster = part.y, term) %>%
+        filter(abs(myth-monster) > .1) %>% 
+        mutate(myth = round(myth*100,0), monster = round(monster*100,0))
+
+# create slopegraph
+source("slopegraph.R")
+
+with(xfcountmerged, slopegraph(myth, monster, term))
+
+###########################################################
+# Hierarchical clustering
+# Ward Hierarchical Clustering
+
+rownames(xfmerged) <- xfmerged$VarTitle
+
+dep <- dist(xfmerged[ , -c(1:10)], method = "euclidean") # distance matrix
+fit <- hclust(dep, method="ward") 
+plot(fit) # display dendogram
+groups <- cutree(fit, k=2) # cut tree into 5 clusters
+# draw dendogram with red borders around the 5 clusters 
+rect.hclust(fit, k=2, border="red")
+
+xfmergedFlip <- t(xfmerged)
+xfmergedFlip <- xfmergedFlip[-c(1:10) ,]
+dword <- dist(xfmergedFlip[ , -c(1:10)], method = "euclidean") # distance matrix
+fit <- hclust(dword, method="ward") 
+plot(fit) # display dendogram
+groups <- cutree(fit, k=5) # cut tree into 5 clusters
+# draw dendogram with red borders around the 5 clusters 
+rect.hclust(fit, k=5, border="red")
+
+
+
+
+
+
+#################################################
 # Prepare data for Latent Semantic Analysis (LSA)
 # Reference: http://nm.wu-wien.ac.at/research/publications/b675.pdf
 
