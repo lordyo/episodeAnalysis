@@ -171,7 +171,7 @@ xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
 xfDTM <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
 xfDTM <- data.frame(as.matrix(xfDTM), as.is = TRUE)
 
-# Merge DTM with episode data (unsure if this df will be used later)
+# Merge DTM with episode data 
 xfmerged <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
 
 
@@ -286,7 +286,7 @@ with(xfcountmerged, slopegraph(myth, monster, term))
 # Prepare data for Latent Semantic Analysis (LSA)
 # Reference: http://nm.wu-wien.ac.at/research/publications/b675.pdf
 
-# remove temrs with less than 5 global counts
+# remove terms with less than 5 global counts
 xfsums <- xfDTM[colSums(xfDTM) > 5]
 #xfsums <- xfDTM  #to use all words
 
@@ -300,16 +300,15 @@ xfDTMweigh <- lw_tf(xfsums) * gw_idf(xfsums)
 
 #################################################
 # exploratory analysis: create heat map of weighted DTM
+# not useful
 
-library(pheatmap)
+# library(pheatmap)
+# 
+# pheatmap(xfDTMweigh)
+# pheatmap(xfsums, kmeans_k = 10)
 
-pheatmap(xfDTMweigh)
-pheatmap(xfsums, kmeans_k = 10)
-
-#missing values in 7ABX04
-
-
-
+#################################################
+# 
 
 xfspace <- lsa(xfDTMweigh, dims = dimcalc_share())
 xfmatrix <- as.textmatrix(xfspace)
@@ -327,6 +326,78 @@ xfmatrix <- as.textmatrix(xfspace)
 lsaMatrix <- diag(xfspace$sk) %*% t(xfspace$tk)
 distMatrix <- 1 - cosine(lsaMatrix)
 
+# determine clusters
+wss <- (nrow(distMatrix)-1)*sum(apply(distMatrix,2,var))
+for (i in 2:15) wss[i] <- sum(kmeans(distMatrix, 
+                                     centers=i)$withinss)
+plot(1:15, wss, type="b", xlab="Number of Clusters",
+     ylab="Within groups sum of squares")
 
+# K-Means Cluster Analysis
+fit <- kmeans(distMatrix, 8) # 5 cluster solution
+# get cluster means 
+aggregate(distMatrix,by=list(fit$cluster),FUN=mean)
+# append cluster assignment
+distMatrix <- data.frame(distMatrix, fit$cluster)
 
+cluslist <- data.frame(VarTitle = rownames(distMatrix), Cluster = distMatrix$fit.cluster)
+cluslist <- cluslist %>%
+        inner_join(xfmerged[ , c(1,9)], by = "VarTitle") %>% 
+        arrange(Cluster, VarTitle)
+
+##################################################
+# LDA 
+# reference: https://cran.r-project.org/web/packages/topicmodels/vignettes/topicmodels.pdf
+
+xfDTM2 <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
+dim(xfDTM2)
+
+library(slam)
+summary(col_sums(xfDTM2))
+
+xfterm_tfidf <- tapply(xfDTM2$v/row_sums(xfDTM2)[xfDTM2$i], xfDTM2$j, mean) * 
+        log2(nDocs(xfDTM2)/col_sums(xfDTM2 > 0))
+summary(xfterm_tfidf)
+
+xfDTM2 <- xfDTM2[,xfterm_tfidf >= 0.025]
+xfDTM2 <- xfDTM2[row_sums(xfDTM2) > 0,]
+summary(col_sums(xfDTM2))
+dim(xfDTM2)
+
+library("topicmodels")
+k <- 8
+SEED <- 873
+xf_tm <- list(VEM = LDA(xfDTM2, k = k, control = list(seed = SEED)))
+
+xfTopic <- topics(xf_tm[["VEM"]], 1)
+xfTerms <- terms(xf_tm[["VEM"]], 20)
+xfTerms
+
+#################################################################
+# Names by season
+
+xfnames <- c("mulder",
+             "sculli", #written this way for stemming reasons
+             "skinner",
+             "smoke",
+             "krycek",
+             "doggett",
+             "rey",
+             "fowley",
+             "kersh",
+             "spender",
+             "byer",
+             "frohik",
+             "lang",
+             "covarrubia",
+             "throat",
+             "elder",
+             "rohrer")
+
+xftimeline <- select_(xfmerged, .dots = c("ProdCode", xfnames))
+xftimeline <- xftimeline %>% 
+        mutate(Season = as.numeric(substr(ProdCode,1,1))) %>% 
+        select(-ProdCode) %>% 
+        group_by(Season) %>% 
+        summarise_each(funs(sum))
 
