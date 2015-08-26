@@ -112,7 +112,7 @@ xf2 <- xf2 %>%
         mutate(ProdCode = as.character(ProdCode), 
                AirDate = as.character(AirDate),
                Viewers = as.numeric(as.character(Viewers))
-               ) %>% 
+        ) %>% 
         # add title without spaces and punctuation for use in variable names
         mutate(VarTitle = paste(ProdCode, gsub("[^[:alnum:]]", "", Title, perl = TRUE), sep = "_"))
 
@@ -169,7 +169,7 @@ xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
 
 # Create Document Term Matrix as data frame
 xfDTM <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
-xfDTM <- data.frame(as.matrix(xfDTM))
+xfDTM <- data.frame(as.matrix(xfDTM), as.is = TRUE)
 
 # Merge DTM with episode data (unsure if this df will be used later)
 xfmerged <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
@@ -250,28 +250,36 @@ with(xfcountmerged, slopegraph(myth, monster, term))
 ###########################################################
 # Hierarchical clustering
 # Ward Hierarchical Clustering
+# results not very interesting
 
-rownames(xfmerged) <- xfmerged$VarTitle
-
-dep <- dist(xfmerged[ , -c(1:10)], method = "euclidean") # distance matrix
-fit <- hclust(dep, method="ward") 
-plot(fit) # display dendogram
-groups <- cutree(fit, k=2) # cut tree into 5 clusters
-# draw dendogram with red borders around the 5 clusters 
-rect.hclust(fit, k=2, border="red")
-
-xfmergedFlip <- t(xfmerged)
-xfmergedFlip <- xfmergedFlip[-c(1:10) ,]
-dword <- dist(xfmergedFlip[ , -c(1:10)], method = "euclidean") # distance matrix
-fit <- hclust(dword, method="ward") 
-plot(fit) # display dendogram
-groups <- cutree(fit, k=5) # cut tree into 5 clusters
-# draw dendogram with red borders around the 5 clusters 
-rect.hclust(fit, k=5, border="red")
-
-
-
-
+# rownames(xfmerged) <- xfmerged$VarTitle
+# 
+# dep <- dist(xfmerged[ , -c(1:10)], method = "euclidean") # distance matrix
+# fit <- hclust(dep, method="ward") 
+# par(cex = 0.6)
+# plot(fit, nodePar = list(cex = 0.1)) # display dendogram
+# groups <- cutree(fit, k=3) # cut tree into 5 clusters
+# # draw dendogram with red borders around the 5 clusters 
+# rect.hclust(fit, k=3, border="red")
+# par(cex = 1)
+# 
+# xfmergedFlip <- t(xfmerged[ , -c(1:10)])
+# xfmergedFlip <- as.data.frame(xfmergedFlip)
+# rownames(xfmergedFlip) <- colnames(xfmerged[ , -c(1:10)])
+# xfmergedFlip$tot <- rowSums(xfmergedFlip)
+# xfmergedFlip$VarTitle <- rownames(xfmergedFlip)
+# xfmergedFlip <- arrange(xfmergedFlip, desc(tot))
+# rownames(xfmergedFlip) <- xfmergedFlip$VarTitle
+# xfmergedFlip$VarTitle <- NULL
+# xfmergedFlip <- xfmergedFlip[1:100,]
+# 
+# 
+# dword <- dist(xfmergedFlip[ , -c(1:10)], method = "euclidean") # distance matrix
+# fit <- hclust(dword, method="ward") 
+# plot(fit) # display dendogram
+# groups <- cutree(fit, k=5) # cut tree into 5 clusters
+# # draw dendogram with red borders around the 5 clusters 
+# rect.hclust(fit, k=5, border="red")
 
 
 #################################################
@@ -281,7 +289,6 @@ rect.hclust(fit, k=5, border="red")
 # remove temrs with less than 5 global counts
 xfsums <- xfDTM[colSums(xfDTM) > 5]
 #xfsums <- xfDTM  #to use all words
-
 
 library(lsa)
 
