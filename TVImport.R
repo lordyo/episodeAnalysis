@@ -73,16 +73,6 @@ getPlot <- function(url, t = "Plot", h = "h2") {
 
 
 url <- "http://en.wikipedia.org/wiki/List_of_The_X-Files_episodes"
-castnames <- c("david", "duchovny",
-               "gillian", "anderson",
-               "robert","patrick",
-               "annabeth", "gish",
-               "mitch", "pileggi",
-               "william", "davis",
-               "nicholas", "lea",
-               "mimi","rogers",
-               "chris","owens",
-               "james","pickens")
 
 xf <- getTable(url, c(2:6,8:11)) # tables 2-6, 8-11 (table 7 relates to the first movie)
 
@@ -128,6 +118,71 @@ xf2$content[xf2$ProdCode == "7ABX04"] <- getPlot(
         "https://en.wikipedia.org/wiki/The_Sixth_Extinction_II:_Amor_Fati",
         t = "Plot", h = "h3") 
 
+########################################
+# get cast and character names from IMDB
+
+casturl <- "http://www.imdb.com/title/tt0106179/fullcredits/"
+
+# get third table (full cast)
+xcastchar <- content(GET(casturl))
+xcastchar <- readHTMLTable(xcast, which = 3)
+
+# get cast and character names in separate tables
+xcast <- data.frame(as.character(xcast$V2), as.is = TRUE)
+xchar <- data.frame(as.character(xcast$V4), as.is = TRUE)
+
+# function to get term list 
+getcastcorpus <- function(df) {
+        
+        corp <- Corpus(DataframeSource(df), readerControl = list(language = "en"))
+        
+        corp <- tm_map(corp, stripWhitespace) #white spaces
+        corp <- tm_map(corp, content_transformer(tolower))  #lower case
+        corp <- tm_map(corp, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
+        corp <- tm_map(corp, removeNumbers) # numbers
+        corp <- tm_map(corp, stemDocument) # stemming
+        
+        ter <- findFreqTerms(DocumentTermMatrix(corp)) 
+        
+        ter
+}
+
+xfcastterms <- getcastcorpus(xcast)
+xfcharterms <- getcastcorpus(xchar)
+
+# manual list of non-names found in character description (e.g. "airplane pilot")
+remcast <- c("abducte","addict","african","afterglow","age","agent","air","airli","airplan",
+             "american","ampute","analyst","anchorman","archiv","archivist","attorney",
+             "background","bailiff","ballroom","bandit","bank","banker","bartend","base",
+             "basebal","basketbal","bellboy","bespectacl","big","bigger","black","blade",
+             "boss","bottom","bounti","boy","british","burst","businessman","butler","camera",
+             "cameraman","camouflag","canada","cannib","captain","car","caretak","cashier",
+             "cdc","cemeteri","chairman","chief","child","cigarett","clean","cleansuit",
+             "clinician","clone","coach","coffin","colonel","command","committe","comput",
+             "conductor","cop","copilot","crackhead","crazi","creatur","creep","crew",
+             "crewman","cruelfac","cult","dad","dancer","dark","darksuit","databank",
+             "daughter","depart","deputi","deep","detect","detector","distraught","district",
+             "doubl","dream","effect","employe","english","enigma","execution","exwif",
+             "faceless","fbi","fellow","femal","fireman","fontain","food","friend","game",
+             "goat","goate","gray","grayhair","ground","groundskeep","hacker","hand",
+             "hardfac","herself","himself","homeless","hospit","hotel","hous","household",
+             "housekeep","husband","inspector","lawyer","local","man","manag","mask",
+             "medic","member","migrant","mission","missionari","murder","neighbor",
+             "neurosurgeon","northern","old","older","oldest","overcoat","owner","paramed",
+             "patholog","pathologist","patient","patrol","patrolman","photo","pilot","photograph",
+             "polic","policeman","postal","princip","redhair","redhead","redneck",
+             "repairman","roadblock","sailor","school","scientist","second","secretari",
+             "section","shadow","sheriff","shirt","shoeshin","shooter","shopper","skin",
+             "skinhead","smoke","social","speaker","special","spectat","store","supervisor",
+             "surgeon","surgic","tattoo","teacher","team","tech","technician","teenag",
+             "telemarket","terrorist","therapist","throat","toddler","toothpick","tour","tournament",
+             "town","trainer","trucker","übermensch","unholi","uniform","vampir","victim",
+             "waiter","waitress","windbreak","woman","worker","workman","world")
+
+# remove all non-name terms from cast and character vectors
+xfcastterms <- setdiff(xfcastterms, remcast)
+xfcharterms <- setdiff(xfcharterms, remcast)
+
 #######################################
 # Corpus construction and text cleanup
 # http://stackoverflow.com/questions/19850638/tm-reading-in-data-frame-and-keep-texts-id
@@ -161,11 +216,12 @@ for (i in 1:length(xfcorpus)) {
 xfcorpus <- tm_map(xfcorpus, stripWhitespace) #white spaces
 xfcorpus <- tm_map(xfcorpus, content_transformer(tolower))  #lower case
 xfcorpus <- tm_map(xfcorpus, removeWords, stopwords("english")) #stop words
-xfcorpus <- tm_map(xfcorpus, removeWords, castnames) #stop words
 xfcorpus <- tm_map(xfcorpus, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
 xfcorpus <- tm_map(xfcorpus, content_transformer(function(row) iconv(row, "latin1", "ASCII", sub=""))) # non-ascii chars
 xfcorpus <- tm_map(xfcorpus, removeNumbers) # numbers
 xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
+xfcorpus <- tm_map(xfcorpus, removeWords, xfcastterms) #remove names from cast list
+xfcorpus <- tm_map(xfcorpus, removeWords, charterms) #remove names from character list 
 
 # Create Document Term Matrix as data frame
 xfDTM <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
@@ -400,4 +456,5 @@ xftimeline <- xftimeline %>%
         select(-ProdCode) %>% 
         group_by(Season) %>% 
         summarise_each(funs(sum))
+
 
