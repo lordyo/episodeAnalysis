@@ -109,14 +109,14 @@ xf2 <- xf2 %>%
 # get plot summaries
 xf2$content <- unlist(lapply(xf2$epURL, getPlot))
 
-# clean up variables
-rm(cnames)
-
 # get missing plot summary from episode 7ABX04
 # (plot is nested in "Synopsis" under h3 tag)
 xf2$content[xf2$ProdCode == "7ABX04"] <- getPlot(
         "https://en.wikipedia.org/wiki/The_Sixth_Extinction_II:_Amor_Fati",
         t = "Plot", h = "h3") 
+
+# clean up variables and functions
+rm(cnames, url, getHrefs, getPlot, getTable, xf)
 
 ########################################
 # get cast and character names from IMDB
@@ -125,63 +125,45 @@ casturl <- "http://www.imdb.com/title/tt0106179/fullcredits/"
 
 # get third table (full cast)
 xcastchar <- content(GET(casturl))
-xcastchar <- readHTMLTable(xcast, which = 3)
+xcastchar <- readHTMLTable(xcastchar, which = 3)
 
 # get cast and character names in separate tables
-xcast <- data.frame(as.character(xcast$V2), as.is = TRUE)
-xchar <- data.frame(as.character(xcast$V4), as.is = TRUE)
+xcast <- data.frame(as.character(xcastchar$V2), stringsAsFactors = FALSE)
+xchar <- data.frame(as.character(xcastchar$V4), stringsAsFactors = FALSE)
 
 # function to get term list 
 getcastcorpus <- function(df) {
         
+        library(tm)
+        
         corp <- Corpus(DataframeSource(df), readerControl = list(language = "en"))
         
-        corp <- tm_map(corp, stripWhitespace) #white spaces
-        corp <- tm_map(corp, content_transformer(tolower))  #lower case
-        corp <- tm_map(corp, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
-        corp <- tm_map(corp, removeNumbers) # numbers
-        corp <- tm_map(corp, stemDocument) # stemming
-        
-        ter <- findFreqTerms(DocumentTermMatrix(corp)) 
-        
-        ter
+         corp <- tm_map(corp, stripWhitespace) #white spaces
+         corp <- tm_map(corp, content_transformer(tolower))  #lower case
+         corp <- tm_map(corp, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
+         corp <- tm_map(corp, removeNumbers) # numbers
+         corp <- tm_map(corp, stemDocument) # stemming
+         
+         dtm <- DocumentTermMatrix(corp)
+         ffq <- findFreqTerms(dtm)
+         
+         ffq
+
 }
 
+#get cast and character names as separate vectors
 xfcastterms <- getcastcorpus(xcast)
 xfcharterms <- getcastcorpus(xchar)
 
 # manual list of non-names found in character description (e.g. "airplane pilot")
-remcast <- c("abducte","addict","african","afterglow","age","agent","air","airli","airplan",
-             "american","ampute","analyst","anchorman","archiv","archivist","attorney",
-             "background","bailiff","ballroom","bandit","bank","banker","bartend","base",
-             "basebal","basketbal","bellboy","bespectacl","big","bigger","black","blade",
-             "boss","bottom","bounti","boy","british","burst","businessman","butler","camera",
-             "cameraman","camouflag","canada","cannib","captain","car","caretak","cashier",
-             "cdc","cemeteri","chairman","chief","child","cigarett","clean","cleansuit",
-             "clinician","clone","coach","coffin","colonel","command","committe","comput",
-             "conductor","cop","copilot","crackhead","crazi","creatur","creep","crew",
-             "crewman","cruelfac","cult","dad","dancer","dark","darksuit","databank",
-             "daughter","depart","deputi","deep","detect","detector","distraught","district",
-             "doubl","dream","effect","employe","english","enigma","execution","exwif",
-             "faceless","fbi","fellow","femal","fireman","fontain","food","friend","game",
-             "goat","goate","gray","grayhair","ground","groundskeep","hacker","hand",
-             "hardfac","herself","himself","homeless","hospit","hotel","hous","household",
-             "housekeep","husband","inspector","lawyer","local","man","manag","mask",
-             "medic","member","migrant","mission","missionari","murder","neighbor",
-             "neurosurgeon","northern","old","older","oldest","overcoat","owner","paramed",
-             "patholog","pathologist","patient","patrol","patrolman","photo","pilot","photograph",
-             "polic","policeman","postal","princip","redhair","redhead","redneck",
-             "repairman","roadblock","sailor","school","scientist","second","secretari",
-             "section","shadow","sheriff","shirt","shoeshin","shooter","shopper","skin",
-             "skinhead","smoke","social","speaker","special","spectat","store","supervisor",
-             "surgeon","surgic","tattoo","teacher","team","tech","technician","teenag",
-             "telemarket","terrorist","therapist","throat","toddler","toothpick","tour","tournament",
-             "town","trainer","trucker","übermensch","unholi","uniform","vampir","victim",
-             "waiter","waitress","windbreak","woman","worker","workman","world")
+remcast <- read.csv("remcast.csv")
 
 # remove all non-name terms from cast and character vectors
 xfcastterms <- setdiff(xfcastterms, remcast)
 xfcharterms <- setdiff(xfcharterms, remcast)
+
+# cleanup
+rm(casturl, xcast, xchar, xcastchar, getcastcorpus)
 
 #######################################
 # Corpus construction and text cleanup
@@ -221,15 +203,22 @@ xfcorpus <- tm_map(xfcorpus, content_transformer(function(row) iconv(row, "latin
 xfcorpus <- tm_map(xfcorpus, removeNumbers) # numbers
 xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
 xfcorpus <- tm_map(xfcorpus, removeWords, xfcastterms) #remove names from cast list
-xfcorpus <- tm_map(xfcorpus, removeWords, charterms) #remove names from character list 
 
 # Create Document Term Matrix as data frame
 xfDTM <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
 xfDTM <- data.frame(as.matrix(xfDTM), as.is = TRUE)
 
-# Merge DTM with episode data 
+# Merge DTM with episode data => full data set including character names
 xfmerged <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
 
+# construct a similar data set without character names
+xfcorpus <- tm_map(xfcorpus, removeWords, xfcharterms) #remove names from character list 
+xfDTMnn <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
+xfDTMnn <- data.frame(as.matrix(xfDTM), as.is = TRUE)
+xfmergednn <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
+
+# cleanup
+rm(i, m, xfcastterms, xfcharterms, xfcorpus, myReader)
 
 #################################################
 # Exploratory analysis
@@ -303,6 +292,12 @@ source("slopegraph.R")
 
 with(xfcountmerged, slopegraph(myth, monster, term))
 
+
+# cleanup
+rm(xfcountmerged, xfcountTFMonster, xfcountTFMyth, xfmergedTF,
+   nmon, nmyth, nxf, xfcountAll, numToBool, prepCountList, slopegraph)
+
+
 ###########################################################
 # Hierarchical clustering
 # Ward Hierarchical Clustering
@@ -344,7 +339,25 @@ with(xfcountmerged, slopegraph(myth, monster, term))
 
 # remove terms with less than 5 global counts
 xfsums <- xfDTM[colSums(xfDTM) > 5]
+
 #xfsums <- xfDTM  #to use all words
+
+library(slam)
+
+summary(col_sums(xfDTM))
+
+# NOT RUN: input must be real DTM, not matrixed verion --- correct this
+
+xfterm_tfidf <- tapply(xfDTM$v/row_sums(xfDTM)[xfDTM$i], xfDTM$j, mean) * 
+        log2(nDocs(xfDTM)/col_sums(xfDTM > 0))
+
+summary(xfterm_tfidf)
+
+xfsums <- xfDTM[,xfterm_tfidf >= 0.025]
+
+
+
+
 
 library(lsa)
 
