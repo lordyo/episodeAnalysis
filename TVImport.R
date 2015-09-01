@@ -288,7 +288,7 @@ xfcountmerged <- xfcountmerged %>%
         mutate(myth = round(myth*100,0), monster = round(monster*100,0))
 
 # create slopegraph
-source("slopegraph.R")
+source("slopegraph.r")
 
 with(xfcountmerged, slopegraph(myth, monster, term))
 
