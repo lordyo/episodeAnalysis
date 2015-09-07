@@ -205,20 +205,20 @@ xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
 xfcorpus <- tm_map(xfcorpus, removeWords, xfcastterms) #remove names from cast list
 
 # Create Document Term Matrix as data frame
-xfDTM <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
-xfDTM <- data.frame(as.matrix(xfDTM), as.is = TRUE)
+xfDTMfull <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
+xfDTM <- data.frame(as.matrix(xfDTMfull), stringsAsFactors = TRUE)
 
 # Merge DTM with episode data => full data set including character names
 xfmerged <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
 
 # construct a similar data set without character names
 xfcorpus <- tm_map(xfcorpus, removeWords, xfcharterms) #remove names from character list 
-xfDTMnn <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
-xfDTMnn <- data.frame(as.matrix(xfDTM), as.is = TRUE)
-xfmergednn <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
+xfDTMnnfull <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
+xfDTMnn <- data.frame(as.matrix(xfDTMnnfull), as.is = TRUE)
+xfmergednn <- merge(xf2, xfDTMnn, by.x = "VarTitle", by.y = "row.names" )
 
 # cleanup
-rm(i, m, xfcastterms, xfcharterms, xfcorpus, myReader)
+rm(i, m, xfcastterms, xfcharterms, myReader)
 
 #################################################
 # Exploratory analysis
@@ -338,24 +338,24 @@ rm(xfcountmerged, xfcountTFMonster, xfcountTFMyth, xfmergedTF,
 # Reference: http://nm.wu-wien.ac.at/research/publications/b675.pdf
 
 # remove terms with less than 5 global counts
-xfsums <- xfDTM[colSums(xfDTM) > 5]
+#xfsums <- xfDTM[colSums(xfDTM) > 5]
 
 #xfsums <- xfDTM  #to use all words
 
 library(slam)
 
-summary(col_sums(xfDTM))
+summary(col_sums(xfDTMnnfull))
 
 # NOT RUN: input must be real DTM, not matrixed verion --- correct this
 
-xfterm_tfidf <- tapply(xfDTM$v/row_sums(xfDTM)[xfDTM$i], xfDTM$j, mean) * 
-        log2(nDocs(xfDTM)/col_sums(xfDTM > 0))
+xfterm_tfidf <- tapply(xfDTMnnfull$v/row_sums(xfDTMnnfull)[xfDTMnnfull$i], xfDTMnnfull$j, mean) * 
+        log2(nDocs(xfDTMnnfull)/col_sums(xfDTMnnfull > 0))
 
 summary(xfterm_tfidf)
 
-xfsums <- xfDTM[,xfterm_tfidf >= 0.025]
+xfsums <- xfDTMnnfull[,xfterm_tfidf >= 0.036]
 
-
+xfsums <- data.frame(as.matrix(xfsums), stringsAsFactors = FALSE)
 
 
 
@@ -403,7 +403,7 @@ plot(1:15, wss, type="b", xlab="Number of Clusters",
      ylab="Within groups sum of squares")
 
 # K-Means Cluster Analysis
-fit <- kmeans(distMatrix, 8) # 5 cluster solution
+fit <- kmeans(distMatrix, 7) # 7 cluster solution
 # get cluster means 
 aggregate(distMatrix,by=list(fit$cluster),FUN=mean)
 # append cluster assignment
@@ -413,6 +413,8 @@ cluslist <- data.frame(VarTitle = rownames(distMatrix), Cluster = distMatrix$fit
 cluslist <- cluslist %>%
         inner_join(xfmerged[ , c(1,9)], by = "VarTitle") %>% 
         arrange(Cluster, VarTitle)
+
+table(cluslist$Mythology, cluslist$Cluster)
 
 ##################################################
 # LDA 
@@ -428,19 +430,27 @@ xfterm_tfidf <- tapply(xfDTM2$v/row_sums(xfDTM2)[xfDTM2$i], xfDTM2$j, mean) *
         log2(nDocs(xfDTM2)/col_sums(xfDTM2 > 0))
 summary(xfterm_tfidf)
 
-xfDTM2 <- xfDTM2[,xfterm_tfidf >= 0.025]
+xfDTM2 <- xfDTM2[,xfterm_tfidf >= 0.036]
 xfDTM2 <- xfDTM2[row_sums(xfDTM2) > 0,]
 summary(col_sums(xfDTM2))
 dim(xfDTM2)
 
 library("topicmodels")
-k <- 8
+k <- 16
 SEED <- 873
 xf_tm <- list(VEM = LDA(xfDTM2, k = k, control = list(seed = SEED)))
 
 xfTopic <- topics(xf_tm[["VEM"]], 1)
 xfTerms <- terms(xf_tm[["VEM"]], 20)
 xfTerms
+
+cluslist2 <- data.frame(VarTitle = names(xfTopic), Cluster = xfTopic, stringsAsFactors = FALSE)
+
+cluslist2 <- cluslist2 %>%
+        inner_join(xfmerged[ , c(1,9)], by = "VarTitle") %>% 
+        arrange(Cluster, VarTitle)
+
+table(cluslist2$Mythology, cluslist2$Cluster)
 
 #################################################################
 # Names by season
