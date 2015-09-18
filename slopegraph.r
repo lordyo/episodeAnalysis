@@ -1,7 +1,19 @@
-# via FlowingData
-# Make it a function for easier usage
-#
-slopegraph <- function(startpts, endpts, labels) {
+# Slopegraph plotting script by Nathan Yau
+# http://flowingdata.com/2013/06/03/how-to-make-slopegraphs-in-r/
+# includes minor adaptation (print to PNG instead of screen)
+
+
+slopegraph <- function(startpts, endpts, labels, plotname) {
+        
+        # creates a slopegraph in base graph package
+        # 
+        # Args:
+        #  starpts: Starting points (left side)
+        #  endpts:  End points (right side)
+        #  labels:  Labels for both sides
+        #
+        # Return:
+        #   plot
         
         x0 <- c()
         y0 <- c()
@@ -54,6 +66,9 @@ slopegraph <- function(startpts, endpts, labels) {
         ymin <- min(c(startpts, endpts))
         ymax <- max(c(startpts, endpts)) + yoffset
         
+        # turn on PNG printing device
+        png(plotname, width = 1024, height = 1024)
+        
         par(family="serif", mar=c(0,0,0,0))
         plot(0, 0, type="n", main="", xlab="", ylab="", xlim=c(.5,2.5), ylim=c(ymin,ymax*1.1), bty="n", las=1, axes=FALSE)
         segments(x0, y0, x1, y1)
@@ -65,6 +80,9 @@ slopegraph <- function(startpts, endpts, labels) {
         # Year labels
         text(startyear, ymax*1.1, deparse(substitute(startpts)), cex=0.8, pos=2, offset=1)
         text(stopyear, ymax*1.1, deparse(substitute(endpts)), cex=0.8, pos=4, offset=0.5)
+        
+        # turn off PNG printing device
+        dev.off()
 }
 
 
