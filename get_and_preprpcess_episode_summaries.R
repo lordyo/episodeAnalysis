@@ -201,10 +201,10 @@ xfcastterms <- setdiff(xfcastterms, remcast)
 xfcharterms <- setdiff(xfcharterms, remcast)
 
 # save processed data
-write.csv(xcast, paste0("processed_data/", CreateDatedFilename("cast_")))
-write.csv(xcast, paste0("processed_data/", CreateDatedFilename("characters_")))
-write.csv(xfcastterms, paste0("processed_data/", CreateDatedFilename("cast_terms_", "vector")))
-write.csv(xfcharterms, paste0("processed_data/", CreateDatedFilename("character_terms_", "vector")))
+write.csv(xcast, paste0("processed_data/", CreateDatedFilename("cast")))
+write.csv(xcast, paste0("processed_data/", CreateDatedFilename("characters")))
+write.csv(xfcastterms, paste0("processed_data/", CreateDatedFilename("cast_terms", "vector")))
+write.csv(xfcharterms, paste0("processed_data/", CreateDatedFilename("character_terms", "vector")))
 
 # cleanup
 rm(casturl, xcast, xchar, xcastchar, getcastcorpus, remcast)
