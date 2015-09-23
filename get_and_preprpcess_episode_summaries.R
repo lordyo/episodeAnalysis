@@ -115,7 +115,6 @@ getcastcorpus <- function(df) {
 }
 
 
-
 #####################################################
 # main script:
 # 1) construct data frame of all episodes based on series tables
