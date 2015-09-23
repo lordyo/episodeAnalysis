@@ -199,6 +199,9 @@ remcast <- read.csv("remcast.csv")
 xfcastterms <- setdiff(xfcastterms, remcast)
 xfcharterms <- setdiff(xfcharterms, remcast)
 
+# remove "scully" from cast vector (it's both a cast an character name)
+xfcastterms <- setdiff(xfcastterms, "sculli")
+
 # save processed data
 write.csv(xcast, paste0("processed_data/", CreateDatedFilename("cast")))
 write.csv(xcast, paste0("processed_data/", CreateDatedFilename("characters")))
