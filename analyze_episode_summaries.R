@@ -5,6 +5,7 @@ library(slam)
 library(lsa)
 library(topicmodels)
 library(dplyr)
+library(tidyr)
 
 
 
@@ -133,6 +134,20 @@ xftimeline <- xftimeline %>%
         mutate(Season = as.numeric(substr(ProdCode,1,1))) %>% 
         select(-ProdCode) %>% 
         group_by(Season) %>% 
-        summarise_each(funs(sum))
+        summarise_each(funs(sum)) %>% 
+        t() %>% 
+        as.data.frame()
 
+xftimeline <- xftimeline[-1 ,]
+colnames(xftimeline) <- 1:ncol(xftimeline)
+
+xftimeline$term <- rownames(xftimeline)
+
+gather(xftimeline, "term", "season", 1:9)
+
+
+
+
+
+g <- ggplot(data = xftimeline[1 , ], aes(x = ))
 
