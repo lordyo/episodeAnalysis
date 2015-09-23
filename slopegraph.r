@@ -67,7 +67,7 @@ slopegraph <- function(startpts, endpts, labels, plotname) {
         ymax <- max(c(startpts, endpts)) + yoffset
         
         # turn on PNG printing device
-        png(plotname, width = 1024, height = 1024)
+        png(plotname, width = 1024, height = 1024, pointsize = 20)
         
         par(family="serif", mar=c(0,0,0,0))
         plot(0, 0, type="n", main="", xlab="", ylab="", xlim=c(.5,2.5), ylim=c(ymin,ymax*1.1), bty="n", las=1, axes=FALSE)
@@ -83,6 +83,8 @@ slopegraph <- function(startpts, endpts, labels, plotname) {
         
         # turn off PNG printing device
         dev.off()
+        
+        print(paste0("Plot generated: ", plotname))
 }
 
 
