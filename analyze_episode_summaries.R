@@ -1,12 +1,10 @@
 
 # library calls
 
-library(slam)
-library(lsa)
-library(topicmodels)
 library(dplyr)
 library(tidyr)
-
+library(lubridate)
+library(ggplot2)
 
 
 prepCountList <- function(df, n) {
@@ -46,6 +44,23 @@ numToBool <- function(x) {
         
         ifelse(is.numeric(x), x > 0, NA)
 }
+
+Plot_Timeline <- function(df, titletext) {
+        # function to plot a line graph of character
+        # appearance by season
+        # 
+        # Args:
+        #  df: data frame with cols season, term (name) and count (nr of appearances)
+        #
+        # Return:
+        #  ggplot2 object (line graph)
+        
+        g <- ggplot(data = df, aes(x = season, y = count, group = term)) +
+                geom_line(aes(color = term)) +
+                ggtitle(titletext)
+        g
+}
+
 
 #################################################
 # Exploratory analysis
@@ -126,7 +141,8 @@ xfnames <- c("mulder",
              "covarrubia",
              "throat",
              "elder",
-             "rohrer")
+             "rohrer",
+             "kritschgau")
 
 xftimeline <- select_(xfmerged, .dots = c("ProdCode", xfnames))
 
@@ -143,11 +159,14 @@ colnames(xftimeline) <- 1:ncol(xftimeline)
 
 xftimeline$term <- rownames(xftimeline)
 
-gather(xftimeline, "term", "season", 1:9)
+xftimeline <- gather(xftimeline, "season", "count", 1:9)
 
+Plot_Timeline(filter(xftimeline, term %in% c("mulder", "sculli", "doggett", "rey")), "X-Files Agents")
 
+Plot_Timeline(filter(xftimeline, term %in% c("smoke", "krycek", "elder", "rohrer")), "The Syndicate")
 
+Plot_Timeline(filter(xftimeline, term %in% c("throat", "covarrubia", "kritschgau")), "Informants")
 
+Plot_Timeline(filter(xftimeline, term %in% c("skinner", "fowley", "kersh", "spender")), "FBI Agents")
 
-g <- ggplot(data = xftimeline[1 , ], aes(x = ))
-
+Plot_Timeline(filter(xftimeline, term %in% c("frohik", "byer", "lang")), "Lone Gunmen")
