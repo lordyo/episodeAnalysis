@@ -167,7 +167,7 @@ xf2$content[xf2$ProdCode == "7ABX04"] <- getPlot(
         t = "Plot", h = "h3") 
 
 # save processed data
-write.csv(xf, paste0("processed_data/", CreateDatedFilename("episodes_summaries_")))
+write.csv(xf2, paste0("processed_data/", CreateDatedFilename("episodes_summaries_")))
 
 # clean up variables and functions
 rm(cnames, url, getHrefs, getPlot, getTable, xf)
