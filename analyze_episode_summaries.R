@@ -170,3 +170,6 @@ Plot_Timeline(filter(xftimeline, term %in% c("throat", "covarrubia", "kritschgau
 Plot_Timeline(filter(xftimeline, term %in% c("skinner", "fowley", "kersh", "spender")), "FBI Agents")
 
 Plot_Timeline(filter(xftimeline, term %in% c("frohik", "byer", "lang")), "Lone Gunmen")
+
+
+

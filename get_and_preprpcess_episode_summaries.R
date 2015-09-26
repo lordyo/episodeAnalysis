@@ -10,17 +10,27 @@ library(tm)
 library(dplyr)
 library(tidyr)
 
-###################################
-# The function evaluates every child of an HTML table:
-# If it contains an anchor a, if returns its href attribute
-# (preceded by the protocol and the base url) plus the link text.
-# If not, it just returns the childs text. –
-# via lukeA on http://stackoverflow.com/questions/31924546/rvest-table-scraping-including-links
-# The function also evaluates if a cell contains a footnote and marks it with a superscript 1 (¹)
-# For X-Files, a double dagger footnotes a "mythology arc" episode
-
+############## FUNCTIONS #####################
 
 getHrefs <- function(node, encoding) {  
+        # The function evaluates every child of an HTML table:
+        # If it contains an anchor a, if returns its href attribute
+        # (preceded by the protocol and the base url) plus the link text.
+        # If not, it just returns the childs text. –
+        # via lukeA on http://stackoverflow.com/questions/31924546/rvest-table-scraping-including-links
+        # The function also evaluates if a cell contains a footnote and marks it with a superscript 1 (¹)
+        # For X-Files, a double dagger footnotes a "mythology arc" episode
+        #
+        # Args:
+        #  node: an html node
+        #  encoding: text encoding
+        #
+        # Return:
+        #  if the node is a link:
+        #   the link text, a "¹" sign if it contains an image, and the link URL
+        # 
+        #  if the node is not a lin:
+        #   the node text
         
         x <- xmlChildren(node)$a
         y <- ifelse(is.null(xmlChildren(node)$img), "", "¹")
@@ -39,10 +49,17 @@ getHrefs <- function(node, encoding) {
 }
 
 ########################################################
-# function to get the table from HTML and apply getHrefs 
-
 
 getTable <- function(url, tabnum) {
+        # function to get the table from HTML and apply getHrefs 
+        # 
+        # Args:
+        #  url: The URL
+        #  tabnum: the number of the table in the overall HTML code
+        #
+        # Return:
+        #  a table
+        
         
         doc <- content(GET(url))
         tab <- readHTMLTable(doc, which = tabnum, elFun = getHrefs)
@@ -51,15 +68,25 @@ getTable <- function(url, tabnum) {
 }
 
 ########################################################
-# function to extract the plot from an episode page
-# xpath code from http://stackoverflow.com/questions/18167279/trying-to-get-all-p-tag-text-between-two-h2-tags
-# t refers to span ID, h refers to heading tag level
 
 getPlot <- function(url, t = "Plot", h = "h2") {
+        # function to extract the plot from an episode page
+        # xpath code from http://stackoverflow.com/questions/18167279/trying-to-get-all-p-tag-text-between-two-h2-tags
+        # t refers to span ID, h refers to heading tag level
+        #
+        # Args:
+        #  url: the URL of a Wikipedia page containing
+        #  t:   a heading name (defaults to "Plot")
+        #  h:   the heading formating (defaults to "h2")
+        #
+        # Return:
+        #  the text of the paragraphs after the specified headings
+        #  until the next heading, as character string
         
+                
         xp = paste0("//p[preceding-sibling::", h, "[1][span='", t, "']]")
         
-        eplot <- html(url) %>% 
+        eplot <- read_html(url) %>% 
                 # get the nodes following the h2 "Plot" until the next h2
                 html_nodes(xpath = xp) %>% 
                 # strip tags
@@ -71,7 +98,6 @@ getPlot <- function(url, t = "Plot", h = "h2") {
 }
 
 CreateDatedFilename <- function(filename, extension = "csv") {
-        
         # Creates a string for use as file name, including current date + time
         #
         # Args:

@@ -1,0 +1,350 @@
+---
+title: "The Truth is In There - an analysis of X-Files episode summaries using R"
+author: "Timm Suess"
+date: "September 25, 2015"
+output: html_document
+---
+## Introduction
+
+The great thing about data science is that you can find data in almost every subject and try out new methods independent of the content. I wanted to explore some natural language processing packages and techniques and was looking for interesting textual data beyond Twittr dumps and R mailing list posts. My choice was the complete list of episode summaries from The X-Files collected on Wikipedia. Not because I am a hardcore fan of the series, but because it ran for a long time (9 seasons with over 200 episodes) and its episodes can be divided into two categories: "Monster of the week" episodes, dealing with all kinds of scary things Mulder and Scully encounter in their cases, and "Mythology Arc" episodes, uncovering The Truth behind the worldwide conspiracy behind alien invasions and abductions. 
+
+## Part 1: Getting the data
+
+The show and all its episodes are well documented on Wikipedia and an almost standard format. There is an overview of all episodes for a season in table format, each of them linking to a detailed description page per episode. I chose Hadley Wickham's ```rvest``` package for the scraping part.
+
+Take a look at the [episode tables](https://en.wikipedia.org/wiki/List_of_The_X-Files_episodes#Episodes) on Wikipedia: We will be needing 2-6 and 8-11 on this page (we leave out table 7 because it refers to the first X-Files movie). While the data is in a nice table format, its contents are not yet [tidy](http://www.jstatsoft.org/index.php/jss/article/view/v059i10/v59i10.pdf) (PDF): For one, the most important information - the link to the episode page - is "hidden" within the link of the episode title. Also, the information if an episode is a "Mythology" episode is hidden in a "double dagger" footnote behind the episode title.
+
+To extract all three data points from the "Title" column, we will need the following function ```getHrefs``` : 
+
+```{r, message=F, warning=F}
+
+library(XML)
+library(httr)
+library(rvest)
+
+getHrefs <- function(node, encoding) {  
+        # The function evaluates every child of an HTML table:
+        # If it contains an anchor a, if returns its href attribute
+        # (preceded by the protocol and the base url) plus the link text.
+        # If not, it just returns the childs text. –
+        # via lukeA on http://stackoverflow.com/questions/31924546/rvest-table-scraping-including-links
+        # The function also evaluates if a cell contains a footnote and marks it with a superscript 1 (¹)
+        # For X-Files, a double dagger footnotes a "mythology arc" episode
+        #
+        # Args:
+        #  node: an html node
+        #  encoding: text encoding
+        #
+        # Return:
+        #  if the node is a link:
+        #   the link text, a "¹" sign if it contains an image, and the link URL
+        # 
+        #  if the node is not a link:
+        #   the node text
+        
+        x <- xmlChildren(node)$a
+        y <- ifelse(is.null(xmlChildren(node)$img), "", "¹")
+        
+        
+        if (!is.null(x)) 
+                
+                paste0(xmlValue(x),
+                       y,
+                       "|",
+                       "http://",
+                       parseURI(url)$server,
+                       xmlGetAttr(x, "href"))
+        
+        else xmlValue(xmlChildren(node)$text) 
+}
+```
+
+This function gets packed into a ```getTable``` function to scrape tables:
+
+```{r}
+getTable <- function(url, tabnum) {
+        # function to get the table from HTML and apply getHrefs 
+        # 
+        # Args:
+        #  url: The URL
+        #  tabnum: the number of the table in the overall HTML code
+        #
+        # Return:
+        #  a table
+        
+        doc <- content(GET(url))
+        tab <- readHTMLTable(doc, which = tabnum, elFun = getHrefs)
+        
+        tab
+}
+```
+
+Finally, we apply the ```getTable``` function to scrape all the tables we need and turn it into a data table.
+
+```{r cache = TRUE}
+url <- "http://en.wikipedia.org/wiki/List_of_The_X-Files_episodes"
+
+xf <- getTable(url, c(2:6, 8:11)) # tables 2-6, 8-11 (table 7 relates to the first movie)
+
+# consolidate column names
+cnames <- c("NrInSeries","NrInSeason","Title","Director","Writer","AirDate","ProdCode","Viewers")
+xf <- lapply(xf, setNames, cnames)
+
+# collapse table list into one data frame
+xf <- do.call(rbind, xf)
+
+str(xf)
+```
+
+Lots of over-factorized data - time for some cleanup:
+
+```{r, message=F, warning=F}
+library(dplyr)
+library(tidyr)
+
+xf2 <- tbl_df(xf)
+
+xf2 <- xf2 %>% 
+        #separate Title, Director, Writer into text and URL columns
+        separate(Title, into = c("Title","epURL"), sep = "\\|", extra = "merge") %>% 
+        separate(Director, into = c("Director","DirURL"), sep = "\\|", extra = "merge") %>% 
+        separate(Writer, into = c("Writer","WritURL"), sep = "\\|", extra = "merge") %>% 
+        #differentiate between Monster and Mythology episodes
+        mutate(Mythology = grepl("¹", Title)) %>% 
+        mutate(Title = sub("¹", "", Title)) %>% 
+        #rearrange and drop unnecessary columns
+        select(ProdCode, Title, epURL, Director, Writer, AirDate, Viewers, Mythology) %>% 
+        # get rid of factors
+        mutate(ProdCode = as.character(ProdCode), 
+               AirDate = as.character(AirDate),
+               Viewers = as.numeric(as.character(Viewers))
+        ) %>% 
+        # add title without spaces and punctuation for use in variable names
+        mutate(VarTitle = paste(ProdCode, gsub("[^[:alnum:]]", "", Title, perl = TRUE), sep = "_"))
+
+str(xf2)
+```
+
+Nice - everything tidied up. We have even got the "Mythology" tag as a Boolean value in its own column, which will come in handy later. But wait... isn't there something missing? Right - this is only metadata! What we still need is the episode summaries itself.
+
+The summaries are stored as text on separate pages which can be reached via the links in our ```epURL``` column. Check out the summary for the [pilote episode](https://en.wikipedia.org/wiki/Pilot_%28The_X-Files%29): What we need can be found in the paragraphs after the heading "Plot". Since we are dealing with 201 episodes, we will need another function to get them:
+
+```{r}
+getPlot <- function(url, t = "Plot", h = "h2") {
+        # function to extract the plot from an episode page
+        # xpath code from http://stackoverflow.com/questions/18167279/trying-to-get-all-p-tag-text-between-two-h2-tags
+        # t refers to span ID, h refers to heading tag level
+        #
+        # Args:
+        #  url: the URL of a Wikipedia page containing
+        #  t:   a heading name (defaults to "Plot")
+        #  h:   the heading formating (defaults to "h2")
+        #
+        # Return:
+        #  the text of the paragraphs after the specified headings
+        #  until the next heading, as character string
+        
+                
+        xp = paste0("//p[preceding-sibling::", h, "[1][span='", t, "']]")
+        
+        eplot <- read_html(url) %>% 
+                # get the nodes following the h2 "Plot" until the next h2
+                html_nodes(xpath = xp) %>% 
+                # strip tags
+                html_text() %>%
+                # concatenate vector of texts into one string
+                paste(collapse = "")
+        
+        eplot
+}
+```
+
+We will apply this function to all of the entries in our ```epURL``` column and store the results in a new column ```content```. Depending on your internet connection, this can take a few minutes.
+
+```{r cache=TRUE}
+# get plot summaries
+xf2$content <- unlist(lapply(xf2$epURL, getPlot))
+```
+
+```{r}
+str(xf2$content)
+```
+
+Unfortunately, not all episode pages are formatted the same way. One of them, episode 7ABX04, has its plot summary written under a h3 (not h2) title. We will need to import it seperately. 
+
+```{r cache = TRUE}
+# get missing plot summary from episode 7ABX04
+# (plot is nested in "Synopsis" under h3 tag)
+xf2$content[xf2$ProdCode == "7ABX04"] <- getPlot(
+        "https://en.wikipedia.org/wiki/The_Sixth_Extinction_II:_Amor_Fati",
+        t = "Plot", h = "h3") 
+```
+
+Looks like we have what we need in our table. Let's get rid off the intermediate data:
+```{r}
+# clean up variables and functions
+rm(cnames, url, getHrefs, getPlot, getTable, xf)
+```
+
+In part 2, I will show you how to prepare the content data for natural language processing using the ```tm``` package.
+
+## Part 2: Preparing for text analysis
+
+This is part 2 of a natural language processing analysis of X-Files episode summaries. In part 1 I explained how to get the data from Wikipedia. The next step is to get the data ready for analysis.
+
+One problem that we're facing in the episode summaries is that they contain names - lots of names. Some of them are useful (e.g. the main character names). Others, such as cast names, don't have any relevance to our analysis. Let's get those names and create stopword lists out of them, i.e. lists of terms that should be excluded from analysis.
+
+The best source for cast and character information is the [X-Files Full Credits page](http://www.imdb.com/title/tt0106179/fullcredits/) on IMDB, where it is stored in the third table. We scrape the table and store the cast and character names (columns ```V2``` and ```V4```) in two separate data frames called ```xchar``` and ```xcast```. 
+
+```{r}
+casturl <- "http://www.imdb.com/title/tt0106179/fullcredits/"
+
+# get third table (full cast)
+xcastchar <- content(GET(casturl))
+xcastchar <- readHTMLTable(xcastchar, which = 3)
+
+# get cast and character names in separate tables
+xcast <- data.frame(as.character(xcastchar$V2), stringsAsFactors = FALSE)
+xchar <- data.frame(as.character(xcastchar$V4), stringsAsFactors = FALSE)
+
+str(xcast)
+str(xchar)
+```
+
+The cast list seems clean, but the character list is a little messy. What we really want is two lists of names that we can use as stopwords - i.e. two vectors containing words we can subtract from our episode summary collection.
+
+To do this, we need to treat the cast and character list as a "text corpus"" for use in the ```tm``` package. ```tm``` is a framework of packages for natural language processing. Our two lists need to be cleaned, which means removing extra whitespaces, transforming to lower case, removing of punctuation and numbers. We will also [stem](https://en.wikipedia.org/wiki/Stemming) the lists - which seems strange for names, but since we will be stemming the episode summaries later on, names can only be removed if they are stemmed too.
+
+The following function takes care of all that cleaning, creates a document term matrix (DTM) and returns a term list, i.e. a list of all the words remaining after the cleaning.
+
+```{r, message=F, warning=F}
+
+library(tm)
+
+getcastcorpus <- function(df) {
+        # Creates a frequent term matrix from a data frame of text
+        #
+        # Args:
+        #  df: data frame containing the corpus texts
+        #
+        # Return:
+        #  ffq: frequent term matrix
+        
+        corp <- Corpus(DataframeSource(df), readerControl = list(language = "en"))
+        
+        corp <- tm_map(corp, stripWhitespace) #white spaces
+        corp <- tm_map(corp, content_transformer(tolower))  #lower case
+        corp <- tm_map(corp, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
+        corp <- tm_map(corp, removeNumbers) # numbers
+        corp <- tm_map(corp, stemDocument) # stemming
+        
+        dtm <- DocumentTermMatrix(corp)
+        ffq <- findFreqTerms(dtm)
+        
+        ffq
+}
+```
+
+We now apply the function to our two name lists and receive the names as vectors:
+
+```{r cache = TRUE}
+#get cast and character names as separate vectors
+xfcastterms <- getcastcorpus(xcast)
+xfcharterms <- getcastcorpus(xchar)
+
+str(xfcastterms)
+str(xfcharterms)
+```
+
+Almost perfect - one problem remains: Some of the names are also English words which we want to include in our analysis. For example, a character might be described as "Gas Station Attendant". We want to include those words in the analysis, so we need to exclude them from the stopword lists.
+
+For this, I created a list called ```remcast.csv``` which includes all those words we don't want to exclude:
+
+```{r cache = TRUE}
+# manual list of non-names found in character description (e.g. "airplane pilot")
+remcast <- read.csv("remcast.csv")
+
+head(remcast)
+```
+
+Now we subtract the ```remcast``` list from both the cast and character vectors. Also, we make sure "Scully" (stemmed to "sculli") is not removed from the character list.
+
+```{r}
+# remove all non-name terms from cast and character vectors
+xfcastterms <- setdiff(xfcastterms, remcast)
+xfcharterms <- setdiff(xfcharterms, remcast)
+
+# remove "scully" from cast vector (it's both a cast an character name)
+xfcastterms <- setdiff(xfcastterms, "sculli")
+
+# cleanup
+rm(casturl, xcast, xchar, xcastchar, getcastcorpus, remcast)
+```
+
+Our stopword lists are ready. On to the real data - our episode summaries. Again, we will use the ```tm``` package to create a corpus of summaries, clean and tokenize it. Since we want to keep our metadata (e.g. our episode titles), we will use a little trick to attach the episode code for later identification (check out the Stack Overflow question mentioned in the code for more info on this). 
+
+```{r}
+# Corpus construction and text cleanup
+# http://stackoverflow.com/questions/19850638/tm-reading-in-data-frame-and-keep-texts-id
+
+# create Corpus
+m <- list(id = "VarTitle", content = "content")
+myReader <- readTabular(mapping = m)
+xfcorpus <- Corpus(DataframeSource(xf2), readerControl = list(reader = myReader, language = "en"))
+
+# manually attach the product code for later identificaiton
+for (i in 1:length(xfcorpus)) {
+        attr(xfcorpus[[i]], "ID") <- xf2$VarTitle[i]
+}
+
+inspect(xfcorpus[1])
+```
+
+Our episode summary corpus is ready for cleaning. Again, we remove white spaces, transform to lower case, remove punctuation and numbers and stem the words. Additionally, we remove non-ASCII symbols, standard English stop words ("the", "and", etc.) and our cast stopwords - but not the character stop words.
+
+
+```{r cache = TRUE}
+xfcorpus <- tm_map(xfcorpus, stripWhitespace) #white spaces
+xfcorpus <- tm_map(xfcorpus, content_transformer(tolower))  #lower case
+xfcorpus <- tm_map(xfcorpus, removeWords, stopwords("english")) #stop words
+xfcorpus <- tm_map(xfcorpus, removePunctuation, preserve_intra_word_dashes = FALSE) #regular punctuation
+xfcorpus <- tm_map(xfcorpus, content_transformer(function(row) iconv(row, "latin1", "ASCII", sub=""))) # non-ascii chars
+xfcorpus <- tm_map(xfcorpus, removeNumbers) # numbers
+xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
+xfcorpus <- tm_map(xfcorpus, removeWords, xfcastterms) #remove names from cast list
+```
+
+We create a DTM out of our corpus...
+
+```{r cache = TRUE}
+# Create Document Term Matrix as data frame
+xfDTMfull <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
+xfDTM <- data.frame(as.matrix(xfDTMfull), stringsAsFactors = TRUE)
+
+str(xfDTM, list.len = 5)
+```
+
+... and re-attach it to our meta-data:
+
+```{r}
+# Merge DTM with episode data => full data set including character names
+xfmerged <- merge(xf2, xfDTM, by.x = "VarTitle", by.y = "row.names" )
+
+str(xfmerged, list.len = 15)
+```
+
+Some cleanup:
+
+```{r}
+# cleanup
+rm(i, m, xfcastterms, xfcharterms, myReader)
+```
+
+And we're done with preprocessing our data! Everything we need is neatly stored in a DTM including episode meta-data.
+
+In part 3, we're going to explore the dataset and look for differences between the "monster of the week" and "mythology arc" episodes.
+
+## Part 3: Monster vs. Mythology word use
+
+
+
