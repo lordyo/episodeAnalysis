@@ -389,6 +389,66 @@ rm(i, m, xfcastterms, xfcharterms, myReader)</code></pre>
 </div>
 <div id="part-3-monster-vs.mythology-word-use" class="section level2">
 <h2>Part 3: Monster vs. Mythology word use</h2>
+<p>This is part 3 of a natural language processing analysis of X-Files episode summaries. In parts 1 and 2 I explained how to get the data from Wikipedia and pre-process it for analysis. Now we can start working with the data.</p>
+<p>Our data is stored in a neat document term matrix (DTM), along with meta-data. That means, every row of our data frame contains one of the 201 X-Files episodes. Our first 10 columns contain information about the episode, while the other 6000+ columns contain an alphabetized list of words and how often these words appear in each episode.</p>
+<p>Let’s look at what the most prominent words are in the collection of episode summaries. Remember, our corpus cleanup got rid of English stop words (“the”, “and”, etc.) as well as the names of actors (i.e. “Duchovny” won’t appear in the list - but “Mulder” will).</p>
+<p>The total count of the words could be misleading though - episode summary length or the way summaries are written skew the ratio. To “normalize” these effects, we will concentrate on if a word appears in an episode or not. For this, we need to transform the word count in our DTM to a Boolean value - TRUE if the count is 1 or greater, FALSE if the count is zero. For this, we define a simple function <code>numToBool</code></p>
+<pre class="r"><code>numToBool &lt;- function(x) {
+        # function to set counts to boolean values
+        #
+        # Args:
+        #  x: an integer
+        #
+        # Return:
+        #  a Boolean value (&gt;=1 TRUE, &lt;1 FALSE) 
+        
+        ifelse(is.numeric(x), x &gt; 0, NA)
+}</code></pre>
+<p>We apply this function to all of the DTM cells.</p>
+<pre class="r"><code>xfmergedTF &lt;- xfmerged
+
+# change word counts to Boolean values ()
+xfmergedTF[ , -c(1:10)] &lt;- as.data.frame(lapply(
+        xfmergedTF[ , -c(1:10)],FUN = function(x) {
+                sapply(x, FUN=numToBool)
+                }
+        ))
+
+str(xfmergedTF[ , -c(1:10)], list.len = 5)</code></pre>
+<pre><code>## 'data.frame':    201 obs. of  6568 variables:
+##  $ aaa            : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
+##  $ aaronson       : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
+##  $ aback          : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
+##  $ abandon        : logi  FALSE FALSE FALSE TRUE FALSE FALSE ...
+##  $ abduct         : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
+##   [list output truncated]</code></pre>
+<p>Now we get the sums of all DTM columns (i.e. the number of episodes each word appears in) and divide it by the number of episodes to get a relative value.</p>
+<pre class="r"><code>nxf &lt;- nrow(xfmergedTF)
+
+# get total Boolean counts (all episodes)
+xfcountAll &lt;- xfmergedTF[ , -c(1:10)] %&gt;% 
+        colSums() %&gt;% 
+        sort(decreasing = TRUE) %&gt;% 
+        `/`(nxf)  #divide by number of episodes</code></pre>
+<p>Let’s look at the first 50 terms:</p>
+<pre class="r"><code># show terms with largest counts
+head(xfcountAll, 50)</code></pre>
+<pre><code>##    sculli      find    mulder     agent      kill      tell    believ 
+## 0.9900498 0.9353234 0.8905473 0.8407960 0.7810945 0.7810945 0.7213930 
+##     later     arriv  meanwhil       one      leav      meet       see 
+## 0.7114428 0.6616915 0.6567164 0.6318408 0.6119403 0.6119403 0.6069652 
+##      bodi  investig    reveal     howev       two    discov       fbi 
+## 0.5970149 0.5920398 0.5920398 0.5820896 0.5721393 0.5522388 0.5472637 
+##    return      take     claim     visit      back       die       tri 
+## 0.5373134 0.5273632 0.5174129 0.5024876 0.4975124 0.4776119 0.4776119 
+##      also      head      home      case    realiz    appear     found 
+## 0.4726368 0.4577114 0.4527363 0.4427861 0.4427861 0.4328358 0.4328358 
+##      dead     insid      show    attack   attempt      work    murder 
+## 0.4278607 0.4278607 0.4278607 0.4228856 0.4179104 0.4179104 0.4129353 
+##      name      room     anoth       ask     death     escap    inform 
+## 0.4129353 0.4129353 0.4079602 0.4029851 0.4029851 0.4029851 0.4029851 
+##      come 
+## 0.3980100</code></pre>
 </div>
 
 
