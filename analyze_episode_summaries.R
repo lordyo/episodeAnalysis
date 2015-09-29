@@ -172,4 +172,61 @@ Plot_Timeline(filter(xftimeline, term %in% c("skinner", "fowley", "kersh", "spen
 Plot_Timeline(filter(xftimeline, term %in% c("frohik", "byer", "lang")), "Lone Gunmen")
 
 
+###############################################
+# Network Analysis of most important terms
 
+xfTDM <- xfmerged
+
+# change word counts to Boolean values ()
+xfTDM[ , -c(1:10)] <- as.data.frame(lapply(
+        xfTDM[ , -c(1:10)],FUN = function(x) {sapply(x, FUN=numToBool)}))
+
+xfTDM <- xfTDM %>% 
+        select(-(1:10)) %>% 
+        t()
+
+terms <- rownames(xfTDM)
+
+xfTDM <- as.data.frame(xfTDM)
+
+xfTDM$rsum <- rowSums(xfTDM)
+xfTDM$terms <- terms
+
+xfTDM <- xfTDM %>% 
+        arrange(rsum) %>% 
+        filter(rsum > 100)
+
+rownames(xfTDM) <- xfTDM$terms
+
+xfTDM <- xfTDM %>% 
+        select(-terms) %>% 
+        select(-rsum) %>% 
+        as.matrix()
+
+xfTDM <- xfTDM %*% t(xfTDM)
+
+# via http://www.rdatamining.com/examples/social-network-analysis
+library(igraph)
+
+# build a graph from the above matrix
+g <- graph.adjacency(xfTDM, weighted=T, mode = "undirected")
+
+# remove loops
+g <- simplify(g)
+
+# set labels and degrees of vertices
+V(g)$label <- V(g)$name
+V(g)$degree <- degree(g)
+
+# set seed to make the layout reproducible
+layout1 <- layout.fruchterman.reingold(g)
+plot(g, layout=layout1)
+
+V(g)$label.cex <- 2.2 * V(g)$degree / max(V(g)$degree)+ .2
+V(g)$label.color <- rgb(0, 0, .2, .8)
+V(g)$frame.color <- NA
+egam <- (log(E(g)$weight)+.4) / max(log(E(g)$weight)+.4)
+E(g)$color <- rgb(.5, .5, 0, egam)
+E(g)$width <- egam
+# plot the graph in layout1
+plot(g, layout=layout1)

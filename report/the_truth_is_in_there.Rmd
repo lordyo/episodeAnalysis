@@ -180,7 +180,15 @@ xf2$content[xf2$ProdCode == "7ABX04"] <- getPlot(
         t = "Plot", h = "h3") 
 ```
 
+The episode summaries are complete, but unfortunately have a lot of punctuation typos. Especially, a lot of spaces are missing after periods, commas, etc., which will bite us in our tokenization step if we don't take care of it. So let's apply a little RegEx magix to our ```content``` column:
+
+```{r}
+# replace missing spaces after punctuation in episode summaries
+xf2 <- mutate(xf2, content = gsub(pattern = "([.,!?;:])([^ ])", rep = "\\1 \\2", content))
+```
+
 Looks like we have what we need in our table. Let's get rid off the intermediate data:
+
 ```{r}
 # clean up variables and functions
 rm(cnames, url, getHrefs, getPlot, getTable, xf)
@@ -403,5 +411,60 @@ head(xfcountAll, 50)
 ```
 
 Pretty grim terminology, isn't it? Unsurprisingly, we can see our two main characters' names taking top spots in our list, along with procedural terms such as "case", "fbi" and "investigate". Most of the terms seem to be verbs, the most prominent one being "kill". Words like "body", "die", "dead" and "murder" point to a rather dangerous world the protagonists live in. 
+
+What we want to find out now is how the terminology for the "Monster of the Week" and the "Mythology Arc" differ. For this, we will construct a slopegraph of top terms with strong differences. The first step is to separate the two datasets:
+
+```{r}
+# get Boolean counts for Monster and Mythology episodes
+xfcountTFMonster <- filter(xfmergedTF, Mythology == FALSE)
+xfcountTFMyth <- filter(xfmergedTF, Mythology == TRUE)
+```
+
+Since we need to repeat our data preparation for both sets, it makes sense to construct a function. ```prepCountList()``` will prepare a ranked list our our terms, sorted by frequency. 
+
+```{r}
+prepCountList <- function(df, n) {
+        # function to create a ranked list of relative Boolean counts
+        #
+        # Args:
+        #  df: data frame based on the data format in xfmerged
+        #  n:  count of episodes
+        #
+        # Return:
+        #  df: a data frame of relative occurence (part),
+        #      term and rank
+        
+        df <- df[ , -c(1:10)] %>%
+                colSums() %>% 
+                sort(decreasing = TRUE) %>% 
+                `/`(n) %>% 
+                as.data.frame()
+        
+        df <- mutate(df, term = rownames(df))
+        df$rank <- 1:nrow(df)
+        
+        colnames(df) <- c("part", "term", "rank")
+        
+        df
+}
+```
+
+Now we'll apply the function to the two data frames: 
+
+```{r}
+# get number of episodes
+nmyth = nrow(xfcountTFMyth)
+nmon = nrow(xfcountTFMonster)
+
+nmyth
+nmon
+
+# create ranked lists for Monster and Mythology episodes
+xfcountTFMonster <- prepCountList(xfcountTFMonster, nmon)
+xfcountTFMyth <- prepCountList(xfcountTFMyth, nmyth)
+
+head(xfcountTFMonster)
+head(xfcountTFMyth)
+```
 
 

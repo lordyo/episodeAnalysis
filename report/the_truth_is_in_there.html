@@ -229,6 +229,9 @@ xf2$content &lt;- unlist(lapply(xf2$epURL, getPlot))</code></pre>
 xf2$content[xf2$ProdCode == &quot;7ABX04&quot;] &lt;- getPlot(
         &quot;https://en.wikipedia.org/wiki/The_Sixth_Extinction_II:_Amor_Fati&quot;,
         t = &quot;Plot&quot;, h = &quot;h3&quot;) </code></pre>
+<p>The episode summaries are complete, but unfortunately have a lot of punctuation typos. Especially, a lot of spaces are missing after periods, commas, etc., which will bite us in our tokenization step if we don’t take care of it. So let’s apply a little RegEx magix to our <code>content</code> column:</p>
+<pre class="r"><code># replace missing spaces after punctuation in episode summaries
+xf2 &lt;- mutate(xf2, content = gsub(pattern = &quot;([.,!?;:])([^ ])&quot;, rep = &quot;\\1 \\2&quot;, content))</code></pre>
 <p>Looks like we have what we need in our table. Let’s get rid off the intermediate data:</p>
 <pre class="r"><code># clean up variables and functions
 rm(cnames, url, getHrefs, getPlot, getTable, xf)</code></pre>
@@ -250,10 +253,10 @@ xcast &lt;- data.frame(as.character(xcastchar$V2), stringsAsFactors = FALSE)
 xchar &lt;- data.frame(as.character(xcastchar$V4), stringsAsFactors = FALSE)
 
 str(xcast)</code></pre>
-<pre><code>## 'data.frame':    1931 obs. of  1 variable:
+<pre><code>## 'data.frame':    1932 obs. of  1 variable:
 ##  $ as.character.xcastchar.V2.: chr  &quot;Gillian Anderson&quot; &quot;David Duchovny&quot; &quot;Mitch Pileggi&quot; &quot;Robert Patrick&quot; ...</code></pre>
 <pre class="r"><code>str(xchar)</code></pre>
-<pre><code>## 'data.frame':    1931 obs. of  1 variable:
+<pre><code>## 'data.frame':    1932 obs. of  1 variable:
 ##  $ as.character.xcastchar.V4.: chr  &quot; Dana Scully\n         / ...  \n                  (201 episodes, 1993-2002)&quot; &quot; Fox Mulder\n         / ...  \n                  (179 episodes, 1993-2002)&quot; &quot; Walter Skinner\n         / ...  \n                  (81 episodes, 1994-2002)&quot; &quot; John Doggett\n                  (40 episodes, 2000-2002)&quot; ...</code></pre>
 <p>The cast list seems clean, but the character list is a little messy. What we really want is two lists of names that we can use as stopwords - i.e. two vectors containing words we can subtract from our episode summary collection.</p>
 <p>To do this, we need to treat the cast and character list as a “text corpus”&quot; for use in the <code>tm</code> package. <code>tm</code> is a framework of packages for natural language processing. Our two lists need to be cleaned, which means removing extra whitespaces, transforming to lower case, removing of punctuation and numbers. We will also <a href="https://en.wikipedia.org/wiki/Stemming">stem</a> the lists - which seems strange for names, but since we will be stemming the episode summaries later on, names can only be removed if they are stemmed too.</p>
@@ -336,7 +339,7 @@ inspect(xfcorpus[1])</code></pre>
 ## [[1]]
 ## &lt;&lt;PlainTextDocument&gt;&gt;
 ## Metadata:  2
-## Content:  chars: 4271</code></pre>
+## Content:  chars: 4282</code></pre>
 <p>Our episode summary corpus is ready for cleaning. Again, we remove white spaces, transform to lower case, remove punctuation and numbers and stem the words. Additionally, we remove non-ASCII symbols, standard English stop words (“the”, “and”, etc.) and our cast stopwords - but not the character stop words.</p>
 <pre class="r"><code>xfcorpus &lt;- tm_map(xfcorpus, stripWhitespace) #white spaces
 xfcorpus &lt;- tm_map(xfcorpus, content_transformer(tolower))  #lower case
@@ -352,7 +355,7 @@ xfDTMfull &lt;- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15
 xfDTM &lt;- data.frame(as.matrix(xfDTMfull), stringsAsFactors = TRUE)
 
 str(xfDTM, list.len = 5)</code></pre>
-<pre><code>## 'data.frame':    201 obs. of  6568 variables:
+<pre><code>## 'data.frame':    201 obs. of  6137 variables:
 ##  $ aaa            : num  0 0 0 0 0 0 0 0 0 0 ...
 ##  $ aaronson       : num  0 0 0 0 0 0 0 0 0 0 ...
 ##  $ aback          : num  0 0 0 0 0 0 0 0 0 0 ...
@@ -364,7 +367,7 @@ str(xfDTM, list.len = 5)</code></pre>
 xfmerged &lt;- merge(xf2, xfDTM, by.x = &quot;VarTitle&quot;, by.y = &quot;row.names&quot; )
 
 str(xfmerged, list.len = 15)</code></pre>
-<pre><code>## 'data.frame':    201 obs. of  6578 variables:
+<pre><code>## 'data.frame':    201 obs. of  6147 variables:
 ##  $ VarTitle       : chr  &quot;1X01_DeepThroat&quot; &quot;1X02_Squeeze&quot; &quot;1X03_Conduit&quot; &quot;1X04_TheJerseyDevil&quot; ...
 ##  $ ProdCode       : chr  &quot;1X01&quot; &quot;1X02&quot; &quot;1X03&quot; &quot;1X04&quot; ...
 ##  $ Title          : chr  &quot;Deep Throat&quot; &quot;Squeeze&quot; &quot;Conduit&quot; &quot;The Jersey Devil&quot; ...
@@ -415,7 +418,7 @@ xfmergedTF[ , -c(1:10)] &lt;- as.data.frame(lapply(
         ))
 
 str(xfmergedTF[ , -c(1:10)], list.len = 5)</code></pre>
-<pre><code>## 'data.frame':    201 obs. of  6568 variables:
+<pre><code>## 'data.frame':    201 obs. of  6137 variables:
 ##  $ aaa            : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
 ##  $ aaronson       : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
 ##  $ aback          : logi  FALSE FALSE FALSE FALSE FALSE FALSE ...
@@ -433,22 +436,81 @@ xfcountAll &lt;- xfmergedTF[ , -c(1:10)] %&gt;%
 <p>Let’s look at the first 50 terms:</p>
 <pre class="r"><code># show terms with largest counts
 head(xfcountAll, 50)</code></pre>
-<pre><code>##    sculli      find    mulder     agent      kill      tell    believ 
-## 0.9900498 0.9353234 0.8905473 0.8407960 0.7810945 0.7810945 0.7213930 
-##     later     arriv  meanwhil       one      leav      meet       see 
-## 0.7114428 0.6616915 0.6567164 0.6318408 0.6119403 0.6119403 0.6069652 
-##      bodi  investig    reveal     howev       two    discov       fbi 
-## 0.5970149 0.5920398 0.5920398 0.5820896 0.5721393 0.5522388 0.5472637 
-##    return      take     claim     visit      back       die       tri 
-## 0.5373134 0.5273632 0.5174129 0.5024876 0.4975124 0.4776119 0.4776119 
-##      also      head      home      case    realiz    appear     found 
-## 0.4726368 0.4577114 0.4527363 0.4427861 0.4427861 0.4328358 0.4328358 
-##      dead     insid      show    attack   attempt      work    murder 
-## 0.4278607 0.4278607 0.4278607 0.4228856 0.4179104 0.4179104 0.4129353 
-##      name      room     anoth       ask     death     escap    inform 
-## 0.4129353 0.4129353 0.4079602 0.4029851 0.4029851 0.4029851 0.4029851 
-##      come 
-## 0.3980100</code></pre>
+<pre><code>##    sculli      find    mulder     agent      kill      tell     later 
+## 0.9900498 0.9353234 0.8905473 0.8457711 0.7810945 0.7810945 0.7462687 
+##  meanwhil    believ     arriv       one      leav      meet       see 
+## 0.7313433 0.7213930 0.6616915 0.6368159 0.6169154 0.6119403 0.6069652 
+##      bodi  investig    reveal     howev       two       fbi    discov 
+## 0.5970149 0.5970149 0.5920398 0.5820896 0.5721393 0.5572139 0.5522388 
+##    return      back      take     claim     visit       die       tri 
+## 0.5373134 0.5323383 0.5273632 0.5174129 0.5024876 0.4825871 0.4776119 
+##      also      head      home      case    realiz      dead     found 
+## 0.4726368 0.4577114 0.4527363 0.4427861 0.4427861 0.4378109 0.4378109 
+##    appear    attack     insid      show      work   attempt    murder 
+## 0.4328358 0.4278607 0.4278607 0.4278607 0.4228856 0.4179104 0.4179104 
+##     escap      name      room     anoth     death       ask    inform 
+## 0.4129353 0.4129353 0.4129353 0.4079602 0.4079602 0.4029851 0.4029851 
+##      look 
+## 0.4029851</code></pre>
+<p>Pretty grim terminology, isn’t it? Unsurprisingly, we can see our two main characters’ names taking top spots in our list, along with procedural terms such as “case”, “fbi” and “investigate”. Most of the terms seem to be verbs, the most prominent one being “kill”. Words like “body”, “die”, “dead” and “murder” point to a rather dangerous world the protagonists live in.</p>
+<p>What we want to find out now is how the terminology for the “Monster of the Week” and the “Mythology Arc” differ. For this, we will construct a slopegraph of top terms with strong differences. The first step is to separate the two datasets:</p>
+<pre class="r"><code># get Boolean counts for Monster and Mythology episodes
+xfcountTFMonster &lt;- filter(xfmergedTF, Mythology == FALSE)
+xfcountTFMyth &lt;- filter(xfmergedTF, Mythology == TRUE)</code></pre>
+<p>Since we need to repeat our data preparation for both sets, it makes sense to construct a function. <code>prepCountList()</code> will prepare a ranked list our our terms, sorted by frequency.</p>
+<pre class="r"><code>prepCountList &lt;- function(df, n) {
+        # function to create a ranked list of relative Boolean counts
+        #
+        # Args:
+        #  df: data frame based on the data format in xfmerged
+        #  n:  count of episodes
+        #
+        # Return:
+        #  df: a data frame of relative occurence (part),
+        #      term and rank
+        
+        df &lt;- df[ , -c(1:10)] %&gt;%
+                colSums() %&gt;% 
+                sort(decreasing = TRUE) %&gt;% 
+                `/`(n) %&gt;% 
+                as.data.frame()
+        
+        df &lt;- mutate(df, term = rownames(df))
+        df$rank &lt;- 1:nrow(df)
+        
+        colnames(df) &lt;- c(&quot;part&quot;, &quot;term&quot;, &quot;rank&quot;)
+        
+        df
+}</code></pre>
+<p>Now we’ll apply the function to the two data frames:</p>
+<pre class="r"><code># get number of episodes
+nmyth = nrow(xfcountTFMyth)
+nmon = nrow(xfcountTFMonster)
+
+nmyth</code></pre>
+<pre><code>## [1] 60</code></pre>
+<pre class="r"><code>nmon</code></pre>
+<pre><code>## [1] 141</code></pre>
+<pre class="r"><code># create ranked lists for Monster and Mythology episodes
+xfcountTFMonster &lt;- prepCountList(xfcountTFMonster, nmon)
+xfcountTFMyth &lt;- prepCountList(xfcountTFMyth, nmyth)
+
+head(xfcountTFMonster)</code></pre>
+<pre><code>##        part   term rank
+## 1 0.9858156 sculli    1
+## 2 0.9432624   find    2
+## 3 0.8723404  agent    3
+## 4 0.8439716 mulder    4
+## 5 0.7801418   kill    5
+## 6 0.7446809  later    6</code></pre>
+<pre class="r"><code>head(xfcountTFMyth)</code></pre>
+<pre><code>##        part     term rank
+## 1 1.0000000   mulder    1
+## 2 1.0000000   sculli    2
+## 3 0.9166667     find    3
+## 4 0.8666667 meanwhil    4
+## 5 0.8666667     tell    5
+## 6 0.7833333    agent    6</code></pre>
 </div>
 
 

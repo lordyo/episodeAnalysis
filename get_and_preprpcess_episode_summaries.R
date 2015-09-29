@@ -6,7 +6,6 @@ library(httr)
 library(rvest)
 library(magrittr)
 library(lubridate)
-library(tm)
 library(dplyr)
 library(tidyr)
 
@@ -149,7 +148,7 @@ getcastcorpus <- function(df) {
 
 url <- "http://en.wikipedia.org/wiki/List_of_The_X-Files_episodes"
 
-xf <- getTable(url, c(2:6,8:11)) # tables 2-6, 8-11 (table 7 relates to the first movie)
+xf <- getTable(url, c(2:6, 8:11)) # tables 2-6, 8-11 (table 7 relates to the first movie)
 
 # save raw data
 save(xf, file = paste0("raw_data/", CreateDatedFilename("raw_episodelist", "list"))) 
@@ -192,6 +191,9 @@ xf2$content[xf2$ProdCode == "7ABX04"] <- getPlot(
         "https://en.wikipedia.org/wiki/The_Sixth_Extinction_II:_Amor_Fati",
         t = "Plot", h = "h3") 
 
+# replace missing spaces after punctuation in episode summaries
+xf2 <- mutate(xf2, content = gsub(pattern = "([.,!?;:])([^ ])", rep = "\\1 \\2", content))
+
 # save processed data
 write.csv(xf2, paste0("processed_data/", CreateDatedFilename("episodes_summaries_")))
 
@@ -215,6 +217,9 @@ xcast <- data.frame(as.character(xcastchar$V2), stringsAsFactors = FALSE)
 xchar <- data.frame(as.character(xcastchar$V4), stringsAsFactors = FALSE)
 
 #get cast and character names as separate vectors
+
+library(tm)
+
 xfcastterms <- getcastcorpus(xcast)
 xfcharterms <- getcastcorpus(xchar)
 
