@@ -1,9 +1,9 @@
 # Slopegraph plotting script by Nathan Yau
 # http://flowingdata.com/2013/06/03/how-to-make-slopegraphs-in-r/
-# includes minor adaptation (print to PNG instead of screen)
+# includes minor adaptation (option to print to PNG instead of screen)
 
 
-slopegraph <- function(startpts, endpts, labels, plotname) {
+slopegraph <- function(startpts, endpts, labels, plotname, asPNG = FALSE) {
         
         # creates a slopegraph in base graph package
         # 
@@ -67,7 +67,10 @@ slopegraph <- function(startpts, endpts, labels, plotname) {
         ymax <- max(c(startpts, endpts)) + yoffset
         
         # turn on PNG printing device
-        png(plotname, width = 1024, height = 1024, pointsize = 20)
+        
+        if(asPNG) {
+                png(plotname, width = 1024, height = 1024, pointsize = 20)
+        }
         
         par(family="serif", mar=c(0,0,0,0))
         plot(0, 0, type="n", main="", xlab="", ylab="", xlim=c(.5,2.5), ylim=c(ymin,ymax*1.1), bty="n", las=1, axes=FALSE)
@@ -82,7 +85,9 @@ slopegraph <- function(startpts, endpts, labels, plotname) {
         text(stopyear, ymax*1.1, deparse(substitute(endpts)), cex=0.8, pos=4, offset=0.5)
         
         # turn off PNG printing device
-        dev.off()
+        if(asPNG) {
+                dev.off()
+        }
         
         print(paste0("Plot generated: ", plotname))
 }
