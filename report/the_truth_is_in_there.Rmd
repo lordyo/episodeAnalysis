@@ -420,7 +420,7 @@ xfcountTFMonster <- filter(xfmergedTF, Mythology == FALSE)
 xfcountTFMyth <- filter(xfmergedTF, Mythology == TRUE)
 ```
 
-Since we need to repeat our data preparation for both sets, it makes sense to construct a function. ```prepCountList()``` will prepare a ranked list our our terms, sorted by frequency. 
+Our graph will be based on the most prevalent terms from both of theses lists. We therefore need to sort, rank and reconnect them. Since we need to repeat the sorting/ranking for both sets, it makes sense to construct a function. ```prepCountList()``` will prepare a ranked list our our terms, sorted by frequency. 
 
 ```{r}
 prepCountList <- function(df, n) {
@@ -434,16 +434,16 @@ prepCountList <- function(df, n) {
         #  df: a data frame of relative occurence (part),
         #      term and rank
         
-        df <- df[ , -c(1:10)] %>%
-                colSums() %>% 
-                sort(decreasing = TRUE) %>% 
-                `/`(n) %>% 
-                as.data.frame()
+        df <- df[ , -c(1:10)] %>%               # get rid of metadata
+                colSums() %>%                   # get overall term counts
+                sort(decreasing = TRUE) %>%     # sort high to low
+                `/`(n) %>%                      # divide by episode count
+                as.data.frame()                 # make data frame
         
-        df <- mutate(df, term = rownames(df))
-        df$rank <- 1:nrow(df)
+        df <- mutate(df, term = rownames(df))   # get row names as variable
+        df$rank <- 1:nrow(df)                   # add ranks
         
-        colnames(df) <- c("part", "term", "rank")
+        colnames(df) <- c("part", "term", "rank") # rename col names
         
         df
 }
@@ -467,4 +467,47 @@ head(xfcountTFMonster)
 head(xfcountTFMyth)
 ```
 
+We join the two sets based on the term, so we'll have both ranked lists in one data frame. We take the top 30 terms from both lists and throw out all terms where the difference in episode occurence is 10% or less. What remains is a list of the terms with the biggest difference between "Monster" and "Mythology" episodes.
 
+```{r}
+# join the two ranked lists
+xfcountmerged <- full_join(xfcountTFMyth, xfcountTFMonster, by = "term")
+
+str(xfcountmerged)
+
+# create data for slopegraph (top 30 terms for both episode types)
+# exclude difference below 10%
+xfcountmerged <- xfcountmerged %>% 
+        filter(rank.x <= 30 | rank.y <= 30) %>% 
+        select(myth = part.x, monster = part.y, term) %>%
+        filter(abs(myth-monster) > .1) %>% 
+        mutate(myth = round(myth*100,0), monster = round(monster*100,0))
+
+```
+
+To construct the slopegraph, we'll use a slightly adapted version of [Nathan Yau's plotting function](http://flowingdata.com/2013/06/03/how-to-make-slopegraphs-in-r/). For space reasons, the code is sourced from a [separate file in my GitHub repo](https://github.com/lordyo/episodeAnalysis/blob/master/slopegraph.r).  
+
+```{r}
+# create slopegraph
+source("slopegraph.r")
+
+with(xfcountmerged, slopegraph(myth, monster, term))
+```
+
+The "Mythology" episodes have more aliens and abductions in them; Agent Mulder is mentioned in all of these episodes, and Agent Skinner takes an important role in them too. Protagonists seem to move around more and meet more people ("visit", "arrive", "leave", "return"), and more information is exchanged between people ("tell", "reveal", "inform").
+
+"Monster" episodes on the other hand feature more bodies and murders, and the situations are described as "cases". Names and homes are more important.
+
+The differences in the other terms ("meanwhile", "tri/try") are difficult to interpret and probably have to do with narrative structures in the episode summaries.
+
+Finally, some cleanup:
+
+```{r}
+# cleanup
+rm(xfcountmerged, xfcountTFMonster, xfcountTFMyth, xfmergedTF,
+   nmon, nmyth, nxf, xfcountAll, numToBool, prepCountList, slopegraph)
+```
+
+This concludes part 3 of our analysis. In part 4, we will look at characters and their occurence over seasons. Stay tuned!
+
+## Part 4: Character occurrence
