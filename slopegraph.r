@@ -3,7 +3,7 @@
 # includes minor adaptation (option to print to PNG instead of screen)
 
 
-slopegraph <- function(startpts, endpts, labels, plotname, asPNG = FALSE) {
+slopegraph <- function(startpts, endpts, labels, plotname = NULL, asPNG = FALSE) {
         
         # creates a slopegraph in base graph package
         # 
