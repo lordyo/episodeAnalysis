@@ -69,7 +69,7 @@ slopegraph <- function(startpts, endpts, labels, plotname = NULL, asPNG = FALSE)
         # turn on PNG printing device
         
         if(asPNG) {
-                png(plotname, width = 1024, height = 1024, pointsize = 20)
+                png(plotname, width = 1600, height = 1600, pointsize = 20)
         }
         
         par(family="serif", mar=c(0,0,0,0))

@@ -224,7 +224,8 @@ xfcastterms <- getcastcorpus(xcast)
 xfcharterms <- getcastcorpus(xchar)
 
 # manual list of non-names found in character description (e.g. "airplane pilot")
-remcast <- read.csv("remcast.csv")
+remcast <- read.csv("remcast.csv", stringsAsFactors = FALSE)
+remcast <- remcast$x
 
 # remove all non-name terms from cast and character vectors
 xfcastterms <- setdiff(xfcastterms, remcast)
@@ -240,7 +241,7 @@ write.csv(xfcastterms, paste0("processed_data/", CreateDatedFilename("cast_terms
 write.csv(xfcharterms, paste0("processed_data/", CreateDatedFilename("character_terms", "vector")))
 
 # cleanup
-rm(casturl, xcast, xchar, xcastchar, getcastcorpus, remcast)
+rm(casturl, xcast, xchar, xcastchar, getcastcorpus)
 
 #######################################
 # Corpus construction and text cleanup
@@ -293,5 +294,5 @@ write.csv(xfDTMnn, paste0("processed_data/", CreateDatedFilename("DTM_excl_chara
 write.csv(xfmergednn, paste0("processed_data/", CreateDatedFilename("DTM_excl_characters_and_episode_info")))
 
 # cleanup
-rm(i, m, xfcastterms, xfcharterms, myReader)
+rm(i, m, xfcastterms, myReader)
 

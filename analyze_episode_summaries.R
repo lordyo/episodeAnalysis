@@ -30,7 +30,7 @@ prepCountList <- function(df, n) {
         colnames(df) <- c("part", "term", "rank") # rename col names
         
         df
-}l
+}
 
 
 numToBool <- function(x) {
@@ -146,6 +146,9 @@ xfnames <- c("mulder",
 
 xftimeline <- select_(xfmerged, .dots = c("ProdCode", xfnames))
 
+xftimeline[ , -1][xftimeline[ , -1] > 1] <- 1
+xftimeline[ , -1][xftimeline[ , -1] == 0] <- 0
+
 xftimeline <- xftimeline %>% 
         mutate(Season = as.numeric(substr(ProdCode,1,1))) %>% 
         select(-ProdCode) %>% 
@@ -171,4 +174,21 @@ Plot_Timeline(filter(xftimeline, term %in% c("skinner", "fowley", "kersh", "spen
 
 Plot_Timeline(filter(xftimeline, term %in% c("frohik", "byer", "lang")), "Lone Gunmen")
 
+########################################
+# occurence of characters
 
+termvector <- colnames(xfmerged[ , -(1:10)])
+
+xfcharacters <- intersect(xfcharterms, termvector)
+xfcharacters <- setdiff(xfcharacters, remcast)
+
+xfcharacters <- select_(xfmerged, .dots = xfcharacters)
+
+xfcharacters[ , -1][xfcharacters[ , -1] > 1] <- 1
+xfcharacters[ , -1][xfcharacters[ , -1] == 0] <- 0
+
+xfcharacters <- data.frame(ct = colSums(xfcharacters), name = names(xfcharacters))
+
+xfcharacters <- arrange(xfcharacters, desc(ct))
+        
+        
