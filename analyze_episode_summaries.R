@@ -18,19 +18,19 @@ prepCountList <- function(df, n) {
         #  df: a data frame of relative occurence (part),
         #      term and rank
         
-        df <- df[ , -c(1:10)] %>% 
-                colSums() %>% 
-                sort(decreasing = TRUE) %>% 
-                `/`(n) %>% 
-                as.data.frame()
+        df <- df[ , -c(1:10)] %>%               # get rid of metadata
+                colSums() %>%                   # get overall term counts
+                sort(decreasing = TRUE) %>%     # sort high to low
+                `/`(n) %>%                      # divide by episode count
+                as.data.frame()                 # make data frame
         
-        df <- mutate(df, term = rownames(df))
-        df$rank <- 1:nrow(df)
+        df <- mutate(df, term = rownames(df))   # get row names as variable
+        df$rank <- 1:nrow(df)                   # add ranks
         
-        colnames(df) <- c("part", "term", "rank")
+        colnames(df) <- c("part", "term", "rank") # rename col names
         
         df
-}
+}l
 
 
 numToBool <- function(x) {
