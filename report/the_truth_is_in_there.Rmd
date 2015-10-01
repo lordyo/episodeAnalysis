@@ -255,12 +255,12 @@ getcastcorpus <- function(df) {
 
 We now apply the function to our two name lists and receive the names as vectors:
 
-```{r cache = TRUE}
+```{r}
 #get cast and character names as separate vectors
 xfcastterms <- getcastcorpus(xcast)
 xfcharterms <- getcastcorpus(xchar)
 
-str(xfcastterms)
+str(xfcastterms) 
 str(xfcharterms)
 ```
 
@@ -268,10 +268,11 @@ Almost perfect - one problem remains: Some of the names are also English words w
 
 For this, I created a list called ```remcast.csv``` which includes all those words we don't want to exclude:
 
-```{r cache = TRUE}
+```{r}
 # manual list of non-names found in character description (e.g. "airplane pilot")
-remcast <- read.csv("remcast.csv")
-
+remcast <- read.csv("remcast.csv", stringsAsFactors = FALSE)
+remcast <- remcast$x
+ 
 head(remcast)
 ```
 
@@ -286,7 +287,7 @@ xfcharterms <- setdiff(xfcharterms, remcast)
 xfcastterms <- setdiff(xfcastterms, "sculli")
 
 # cleanup
-rm(casturl, xcast, xchar, xcastchar, getcastcorpus, remcast)
+rm(casturl, xcast, xchar, xcastchar, getcastcorpus)
 ```
 
 Our stopword lists are ready. On to the real data - our episode summaries. Again, we will use the ```tm``` package to create a corpus of summaries, clean and tokenize it. Since we want to keep our metadata (e.g. our episode titles), we will use a little trick to attach the episode code for later identification (check out the Stack Overflow question mentioned in the code for more info on this). 
@@ -311,7 +312,7 @@ inspect(xfcorpus[1])
 Our episode summary corpus is ready for cleaning. Again, we remove white spaces, transform to lower case, remove punctuation and numbers and stem the words. Additionally, we remove non-ASCII symbols, standard English stop words ("the", "and", etc.) and our cast stopwords - but not the character stop words.
 
 
-```{r cache = TRUE}
+```{r}
 xfcorpus <- tm_map(xfcorpus, stripWhitespace) #white spaces
 xfcorpus <- tm_map(xfcorpus, content_transformer(tolower))  #lower case
 xfcorpus <- tm_map(xfcorpus, removeWords, stopwords("english")) #stop words
@@ -319,17 +320,17 @@ xfcorpus <- tm_map(xfcorpus, removePunctuation, preserve_intra_word_dashes = FAL
 xfcorpus <- tm_map(xfcorpus, content_transformer(function(row) iconv(row, "latin1", "ASCII", sub=""))) # non-ascii chars
 xfcorpus <- tm_map(xfcorpus, removeNumbers) # numbers
 xfcorpus <- tm_map(xfcorpus, stemDocument) # stemming
-xfcorpus <- tm_map(xfcorpus, removeWords, xfcastterms) #remove names from cast list
+xfcorpus <- tm_map(xfcorpus, removeWords, xfcastterms) #remove names from cast list  
 ```
 
 We create a DTM out of our corpus...
 
-```{r cache = TRUE}
+```{r}
 # Create Document Term Matrix as data frame
 xfDTMfull <- DocumentTermMatrix(xfcorpus, control = list(wordLengths = c(3,15)))
 xfDTM <- data.frame(as.matrix(xfDTMfull), stringsAsFactors = TRUE)
-
-str(xfDTM, list.len = 5)
+ 
+str(xfDTM, list.len = 5) 
 ```
 
 ... and re-attach it to our meta-data:
@@ -345,7 +346,7 @@ Some cleanup:
 
 ```{r}
 # cleanup
-rm(i, m, xfcastterms, xfcharterms, myReader)
+rm(i, m, myReader)
 ```
 
 And we're done with preprocessing our data! Everything we need is neatly stored in a DTM including episode meta-data.
@@ -378,7 +379,7 @@ numToBool <- function(x) {
 
 We apply this function to all of the DTM cells.
 
-```{r cache = TRUE}
+```{r}
 xfmergedTF <- xfmerged
 
 # change word counts to Boolean values ()
@@ -478,7 +479,7 @@ str(xfcountmerged)
 # create data for slopegraph (top 30 terms for both episode types)
 # exclude difference below 10%
 xfcountmerged <- xfcountmerged %>% 
-        filter(rank.x <= 30 | rank.y <= 30) %>% 
+        filter(rank.x <= 35 | rank.y <= 35) %>% 
         select(myth = part.x, monster = part.y, term) %>%
         filter(abs(myth-monster) > .1) %>% 
         mutate(myth = round(myth*100,0), monster = round(monster*100,0))
@@ -487,7 +488,7 @@ xfcountmerged <- xfcountmerged %>%
 
 To construct the slopegraph, we'll use a slightly adapted version of [Nathan Yau's plotting function](http://flowingdata.com/2013/06/03/how-to-make-slopegraphs-in-r/). For space reasons, the code is sourced from a [separate file in my GitHub repo](https://github.com/lordyo/episodeAnalysis/blob/master/slopegraph.r).  
 
-```{r}
+```{r fig.width = 8, fig.height = 9}
 # create slopegraph
 source("slopegraph.r")
 
@@ -496,7 +497,7 @@ with(xfcountmerged, slopegraph(myth, monster, term))
 
 The "Mythology" episodes have more aliens and abductions in them; Agent Mulder is mentioned in all of these episodes, and Agent Skinner takes an important role in them too. Protagonists seem to move around more and meet more people ("visit", "arrive", "leave", "return"), and more information is exchanged between people ("tell", "reveal", "inform").
 
-"Monster" episodes on the other hand feature more bodies and murders, and the situations are described as "cases". Names and homes are more important.
+"Monster" episodes on the other hand feature more bodies, attacks< and murders, and the situations are described as "cases". Names and homes are more important.
 
 The differences in the other terms ("meanwhile", "tri/try") are difficult to interpret and probably have to do with narrative structures in the episode summaries.
 
@@ -511,3 +512,170 @@ rm(xfcountmerged, xfcountTFMonster, xfcountTFMyth, xfmergedTF,
 This concludes part 3 of our analysis. In part 4, we will look at characters and their occurence over seasons. Stay tuned!
 
 ## Part 4: Character occurrence
+
+This is part 4 of a natural language processing analysis of X-Files episode summaries. Parts 1 and 2 dealt with obtaining and cleaning the data, part 3 showed an analysis of prominent words by episode types. In this post, we will look at characters.
+
+As in every TV show, The X-Files features recurring characters - some taking leading roles, others as supporting characters. There are good guys, bad guys, and ambivalent ones. Let's look at which of these characters gets mentioned most.
+
+```{r}
+# get DTM  of all terms including cast (strip the metadata)
+termvector <- colnames(xfmerged[ , -(1:10)])
+
+# create vector of character names
+# make sure all character names are in the list of terms
+xfcharacters <- intersect(xfcharterms, termvector)
+
+# get rid off non-names using the remcast list
+xfcharacters <- setdiff(xfcharacters, remcast)
+
+# reduce the DTM to character terms only
+xfcharacters <- select_(xfmerged, .dots = xfcharacters)
+
+# set counts to Boolean
+xfcharacters[ , -1][xfcharacters[ , -1] > 1] <- 1
+xfcharacters[ , -1][xfcharacters[ , -1] == 0] <- 0
+
+# construct data frame of terms and Boolean counts
+xfcharacters <- data.frame(ct = colSums(xfcharacters), name = names(xfcharacters))
+
+# sort descending by count
+xfcharacters <- arrange(xfcharacters, desc(ct))
+
+head(xfcharacters, 20)
+
+```
+
+Looks plausible, with our lead actors in the very top. We will now take a top-down approach and construct a very limited list of main characters and see how they appear over the various seasons. Here's the list:
+
+```{r}
+xfnames <- c(
+        # X-Files agents
+        "mulder",
+        "sculli", # written this way for stemming reasons
+        "doggett",
+        "rey", # agent reyes, stemmed
+        
+        # the bad guys
+        "smoke", # the cigarette smoking man
+        "krycek",
+        "elder",
+        "rohrer",
+        
+        # informants
+        "covarrubia",
+        "throat", # deep throat
+        "kritschgau",
+        # "X", deep throat's successor, can't be distinguished in our texts
+        
+        # the FBI
+        "skinner",
+        "fowley",
+        "kersh",
+        "spender",
+        
+        # the Lone Gunmen
+        "byer",
+        "frohik",
+        "lang",
+        "gunmen"
+)
+```
+
+We create a DTM from just these names, reconstruct their season number from the production code and summarize the occurence of each character by season
+
+```{r}
+# get DTM 
+xftimeline <- select_(xfmerged, .dots = c("ProdCode", xfnames))
+
+# construct summary by season
+xftimeline <- xftimeline %>% 
+        mutate(Season = as.numeric(substr(ProdCode,1,1))) %>%  # get season number
+        select(-ProdCode) %>% # Production code no longer needed
+        group_by(Season) %>%  # group and summarise by season
+        summarise_each(funs(sum)) %>% 
+        t() %>%  # rotate the data frame (cols to rows)
+        as.data.frame() # matrix to df
+
+xftimeline <- xftimeline[-1 ,] # get rid of season numbers
+colnames(xftimeline) <- 1:ncol(xftimeline) # add season numbers as col names
+
+# get row character names as own column
+xftimeline$term <- rownames(xftimeline)
+
+str(xftimeline)
+```
+
+Since we'll use ggplot for creating graphs, we will use a long format for our data:
+
+```{r}
+# create long format 
+library(tidyr)
+xftimeline <- gather(xftimeline, "season", "count", 1:9)
+
+str(xftimeline)
+```
+
+To plot multiple graphs, we'll use the following function:
+
+```{r}
+Plot_Timeline <- function(df, titletext) {
+        # function to plot a line graph of character
+        # appearance by season
+        # 
+        # Args:
+        #  df: data frame with cols season, term (name) and count (nr of appearances)
+        #
+        # Return:
+        #  ggplot2 object (line graph)
+        
+        library(ggthemes)
+        
+        g <- ggplot(data = df, aes(x = season, y = count, group = term)) +
+                geom_line(aes(color = term)) +
+                ggtitle(titletext) +
+                theme_few() +
+                scale_colour_few()
+
+        g
+}
+```
+
+Here are the plots - warning: Contains plot spoilers!
+
+```{r}
+Plot_Timeline(filter(xftimeline, term %in% c("mulder", "sculli", "doggett", "rey")), "X-Files Agents")
+```
+
+While Agent Scully remains relatively constant over the various seasons (despite her character's absence in some seaons), we clearly see Agent Mulder's replacement by Agent Doggett in the last few seasons. Agent Reyes' occurence is more of an afterthought (which, in my humble opinion, is deserved).
+
+```{r}
+Plot_Timeline(filter(xftimeline, term %in% c("smoke", "krycek", "elder", "rohrer")), "The Syndicate")
+```
+
+The Cigarette Smoking Man shows an increasingly strong presence until season 7 and then drops off, presumed dead. At this point, "super soldier" Knowle Rohrer takes over. Agent Krycek has two peaks, while the obscure First Elder stays in the background throughout all seasons.
+
+```{r}
+Plot_Timeline(filter(xftimeline, term %in% c("throat", "covarrubia", "kritschgau")), "Informants")
+```
+
+Main informant Deep Throat plays a key role in the first season, gets killed and re-appears in a couple of flashback scenes later. His replacement, "X", unfortunately can't be analyzed due to his unfortunate name (blame it on the 90s). Marita Covarrubias and Michael Kritschgau are important for some seasons, but are otherwise rare occurrences. 
+
+```{r}
+Plot_Timeline(filter(xftimeline, term %in% c("skinner", "fowley", "kersh", "spender")), "FBI Agents")
+```
+
+Agent Skinner dominates this picture. During the sixth and seventh seasons we can see a dip in his mentions, while other FBI characters shortly gain more presence. 
+
+```{r}
+Plot_Timeline(filter(xftimeline, term %in% c("frohik", "byer", "lang", "gunmen")), "Lone Gunmen")
+```
+
+While the Lone Gunmen as a group steadily gain importance over the seasons, some seasons feature individual Gunmen members more prominently (Lange in season 2 and 6, Byers in season 5 and 6). Towards the end, the group has a very strong presence, even though individual members are rarely mentioned.
+
+## Conclusion and Leftovers
+
+This concludes this exploration of the X-Files episode summary data - I hope you have enjoyed it as much as I have. As usual, most of the time was spent on data gathering and cleaning, which is especially true in the case of text-based data (don't ask me how long it took to construct that ```remcast``` list).
+
+Of course, much more could be done with the data, and I hope you grab some of it for your own analyses from my [GitHub repo](https://github.com/lordyo/episodeAnalysis). The original intention of the exercise was to try out some unsupervised machine learning and network analysis techniques, which unfortunately didn't proove fruitful (K-Means clustering, Latent Semantic Analysis, Topic Models).
+
+Finally, this analysis doesn't have to be constrained to X-Files episode summaries: A lot of the code from part 1 and 2 can be re-used for other series - maybe even be turned into a package.

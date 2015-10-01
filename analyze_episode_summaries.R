@@ -55,11 +55,15 @@ Plot_Timeline <- function(df, titletext) {
         # Return:
         #  ggplot2 object (line graph)
         
+        library(ggthemes)
+        
         g <- ggplot(data = df, aes(x = season, y = count, group = term)) +
                 geom_line(aes(color = term)) +
-                ggtitle(titletext)
+                ggtitle(titletext) +
+                theme_few() +
+                scale_colour_few()
+        
         g
-}
 
 
 #################################################
@@ -125,43 +129,61 @@ rm(xfcountmerged, xfcountTFMonster, xfcountTFMyth, xfmergedTF,
 #################################################################
 # Names by season
 
-xfnames <- c("mulder",
-             "sculli", #written this way for stemming reasons
-             "skinner",
-             "smoke",
-             "krycek",
-             "doggett",
-             "rey",
-             "fowley",
-             "kersh",
-             "spender",
-             "byer",
-             "frohik",
-             "lang",
-             "covarrubia",
-             "throat",
-             "elder",
-             "rohrer",
-             "kritschgau")
+xfnames <- c(
+        # X-Files agents
+        "mulder",
+        "sculli", # written this way for stemming reasons
+        "doggett",
+        "rey", # agent reyes, stemmed
+        
+        # the bad guys
+        "smoke", # the cigarette smoking man
+        "krycek",
+        "elder",
+        "rohrer",
+        
+        # informants
+        "covarrubia",
+        "throat", # deep throat
+        "kritschgau",
+        # "X", deep throat's successor, can't be distinguished in our texts
+        
+        # the FBI
+        "skinner",
+        "fowley",
+        "kersh",
+        "spender",
+        
+        # the Lone Gunmen
+        "byer",
+        "frohik",
+        "lang"
+)
 
+# construct DTM
 xftimeline <- select_(xfmerged, .dots = c("ProdCode", xfnames))
 
+# set counts to Boolean
 xftimeline[ , -1][xftimeline[ , -1] > 1] <- 1
 xftimeline[ , -1][xftimeline[ , -1] == 0] <- 0
 
+# construct summary by season
 xftimeline <- xftimeline %>% 
-        mutate(Season = as.numeric(substr(ProdCode,1,1))) %>% 
-        select(-ProdCode) %>% 
-        group_by(Season) %>% 
+        mutate(Season = as.numeric(substr(ProdCode,1,1))) %>%  # get season number
+        select(-ProdCode) %>% # Production code no longer needed
+        group_by(Season) %>%  # group and summarise by season
         summarise_each(funs(sum)) %>% 
-        t() %>% 
-        as.data.frame()
+        t() %>%  # rotate the data frame (cols to rows)
+        as.data.frame() # matrix to df
 
-xftimeline <- xftimeline[-1 ,]
-colnames(xftimeline) <- 1:ncol(xftimeline)
+xftimeline <- xftimeline[-1 ,] # get rid of season numbers
+colnames(xftimeline) <- 1:ncol(xftimeline) # add season numbers as col names
 
+# get row character names as own column
 xftimeline$term <- rownames(xftimeline)
 
+# create long format 
+library(tidyr)
 xftimeline <- gather(xftimeline, "season", "count", 1:9)
 
 Plot_Timeline(filter(xftimeline, term %in% c("mulder", "sculli", "doggett", "rey")), "X-Files Agents")
@@ -177,18 +199,27 @@ Plot_Timeline(filter(xftimeline, term %in% c("frohik", "byer", "lang")), "Lone G
 ########################################
 # occurence of characters
 
+# get DTM  of all terms including cast (strip the metadata)
 termvector <- colnames(xfmerged[ , -(1:10)])
 
+# create vector of character names
+# make sure all character names are in the list of terms
 xfcharacters <- intersect(xfcharterms, termvector)
+
+# get rid off non-names using the remcast list
 xfcharacters <- setdiff(xfcharacters, remcast)
 
+# reduce the DTM to character terms only
 xfcharacters <- select_(xfmerged, .dots = xfcharacters)
 
+# counts to Boolean
 xfcharacters[ , -1][xfcharacters[ , -1] > 1] <- 1
 xfcharacters[ , -1][xfcharacters[ , -1] == 0] <- 0
 
+# construct data frame of terms and Boolean counts
 xfcharacters <- data.frame(ct = colSums(xfcharacters), name = names(xfcharacters))
 
+# sort descending by count
 xfcharacters <- arrange(xfcharacters, desc(ct))
         
         
